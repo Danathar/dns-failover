@@ -1,0 +1,62 @@
+name: Bug report
+description: Failover did not switch, switched wrongly, or an installer or monitor failed
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Redact site specifics before pasting: ControlD profile IDs and the IPv6 addresses derived from them, LAN addresses, hostnames, tailnet names, OAuth credentials. Security problems: use the private "Report a vulnerability" option on the Security tab.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - dns-upstream-check.py (local failover monitor)
+        - dns-upstream-probe.py
+        - install-dns-failover.sh
+        - tailscale-dns-failover/monitor.py
+        - tailscale-dns-failover/configure.py
+        - tailscale-dns-failover/install.sh
+        - systemd units / dnsmasq or Stubby configs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: journal
+    attributes:
+      label: Journal excerpt (site specifics redacted)
+      description: For example `journalctl -u dns-upstream-check.service --since '10 minutes ago'` or `journalctl -u tailscale-dns-failover.service`. Include the contents of `/run/dns-upstream/servers.conf` for local failover problems.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distro and version
+      description: For example Debian 12 or Debian 13.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: dnsmasq and Stubby versions
+      description: Output of `dnsmasq --version` (first line) and `stubby -V`.
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Project version
+      description: Commit SHA or date of the checkout you installed from.
+  - type: textarea
+    id: config
+    attributes:
+      label: Local changes
+      description: Any edits to the units, dnsmasq or Stubby configs, or `auto_restore`. Redact site specifics.
+      render: text

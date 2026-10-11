@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/Danathar/dns-failover/security/advisories/new
+    about: Use this for security problems instead of a public issue. Never paste OAuth credentials or ControlD profile IDs.
+  - name: Tailscale, ControlD, Stubby or dnsmasq themselves
+    url: https://tailscale.com/kb
+    about: This repo only supplies failover glue around those services. Problems with the services belong with their authors.

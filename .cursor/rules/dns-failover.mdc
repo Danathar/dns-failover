@@ -1,0 +1,13 @@
+---
+description: Rules for dns-failover, dnsmasq/Stubby/Tailscale DNS failover in Python and POSIX sh
+alwaysApply: true
+---
+
+Full rules are in `AGENTS.md`; read it first. Essentials:
+
+- Python 3 (stdlib only, 3.11+), POSIX `sh` installers and systemd units. `dns-upstream-check.py` switches dnsmasq between ControlD (port 5453) and Cloudflare Families (port 5454); `tailscale-dns-failover/monitor.py` toggles the tailnet's "Override DNS servers".
+- Host rule: never run `sudo`, either installer, `configure.py`, `monitor.py` in any mode (`--dry-run` calls the live Tailscale API), `dns-upstream-check.py` on real paths or without `--no-reload`, `systemctl`/`service` on dnsmasq/stubby/the units, or any Tailscale API call. Use `python3 -m pytest` and `tests/e2e/run.sh`.
+- Never add real profile IDs, addresses, hostnames, tailnet names or credentials.
+- Before finishing run `python3 -m pytest`, `ruff check .` and `git ls-files '*.sh' | xargs shellcheck`.
+- Conventional Commits; `gh` write commands need `--repo Danathar/dns-failover`.
+- Licence: GPL-3.0-or-later.
