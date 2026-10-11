@@ -79,7 +79,7 @@ workflow permanently, delete the file in a pull request.
 | `ci.yml` | `CI` | jobs `Lint`, `Unit tests (debian 12)`, `Unit tests (debian 13)`, `E2E (debian container)`; every pull request and every push to `main` |
 | `coverage-gate.yml` | `Coverage gate` | measures coverage of the Python code under the tests and fails below `fail_under` in `pyproject.toml`; pull requests and pushes to `main` |
 | `policy-check.yml` | `Policy check` | runs `scripts/check-policies.mjs` over `policies/` and `risk-config.json`, then its tests; pull requests and pushes to `main` |
-| `agent-tooling.yml` | `Agent tooling` | `node --test` over `scripts/tests/` and `.claude/hooks/tests/`; pull requests and pushes to `main` |
+| `agent-tooling.yml` | `Agent tooling` | `node --test 'scripts/tests/*.test.mjs'` and `node --test '.claude/hooks/tests/*.test.mjs'`; pull requests and pushes to `main` |
 | `pr-metrics.yml` | `PR metrics` | scheduled and manual: runs `scripts/pr-metrics.mjs`, writes a step summary and an artifact; read-only ([`metrics.md`](metrics.md)) |
 | `nightly-compliance.yml` | `Nightly compliance` | scheduled and manual: repeats the test and lint jobs; on failure opens or updates one tracking issue and never closes it |
 | `auto-qa.yml` | `Auto-QA` | scheduled and manual: measures coverage, runs `scripts/auto-qa-tuner.mjs` with `.github/auto-qa-tuning.json`, and opens or updates one issue proposing a higher floor; never commits, never lowers a floor |
@@ -211,7 +211,10 @@ added one, and any Hive tokens. `ci.yml` needs no secret.
 1. **Revoke first.** Rotate or delete the credential at its issuer (for
    Tailscale, delete the OAuth client in the admin console), before cleaning the
    repository. History cleanup does not un-leak a secret that was public.
-2. Disable the workflow that used it (table above) until a new one is set.
+2. Stop what used it until a new one is set. For an Anthropic credential,
+   disable `claude.yml` and `ai-fix.yml` (table above). For the Tailscale OAuth
+   credential, the owner stops `tailscale-dns-failover.timer` and then
+   `tailscale-dns-failover.service` on the server before rotating it.
 3. Remove it from the visible surface: edit or delete the comment or issue body;
    for a commit, a revert does not remove it from history, so the owner decides
    about rewriting history of a branch (never of `main` without a plan).

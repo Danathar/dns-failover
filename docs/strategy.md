@@ -42,9 +42,11 @@ From [`README.md`](../README.md):
 ## What ACMM level means here
 
 ACMM (the agentic maturity model Hive evaluates repositories against) is checked
-by whether listed files, directories and settings exist. Here each criterion was
-met with working content: every file is read by a test, a workflow, the hook or
-a person, and none is a stub. Reaching a level is evidence that agents can work
+by whether listed files, directories and settings exist. Here the rollout's intent is that
+each criterion is met with working content: every file is read by a test, a
+workflow, the hook or a person, and none is a stub. That is the end state once
+the pull requests in the ledger merge; the status table below is the baseline
+before them. Reaching a level is evidence that agents can work
 here with guardrails; it says nothing about whether the failover is correct.
 That is what the tests and the risks below are for.
 
