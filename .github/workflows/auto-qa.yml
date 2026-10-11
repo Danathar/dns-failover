@@ -37,7 +37,7 @@ jobs:
       - name: Install pytest, coverage and node
         run: |
           apt-get update -qq
-          apt-get install -y -qq --no-install-recommends python3 python3-pytest python3-coverage nodejs ca-certificates git
+          apt-get install -y -qq --no-install-recommends python3 python3-pytest python3-coverage python3-tomli nodejs ca-certificates git
 
       - name: Checkout code
         uses: actions/checkout@v5
