@@ -1,0 +1,11 @@
+[Unit]
+Description=Check house DNS upstream health every five seconds
+
+[Timer]
+OnBootSec=5s
+OnUnitInactiveSec=5s
+AccuracySec=1s
+Unit=dns-upstream-check.service
+
+[Install]
+WantedBy=timers.target

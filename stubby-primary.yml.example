@@ -1,0 +1,20 @@
+resolution_type: GETDNS_RESOLUTION_STUB
+dns_transport_list:
+  - GETDNS_TRANSPORT_TLS
+tls_authentication: GETDNS_AUTHENTICATION_REQUIRED
+tls_query_padding_blocksize: 128
+edns_client_subnet_private: 1
+idle_timeout: 60000
+listen_addresses:
+  - 127.0.0.1@5453
+  - 0::1@5453
+round_robin_upstreams: 0
+
+upstream_recursive_servers:
+  # ControlD servers (primary)
+  - address_data: 76.76.2.22
+    tls_port: 853
+    tls_auth_name: "YOUR_CONTROLD_PROFILE_ID.dns.controld.com"
+  - address_data: 76.76.10.22
+    tls_port: 853
+    tls_auth_name: "YOUR_CONTROLD_PROFILE_ID.dns.controld.com"

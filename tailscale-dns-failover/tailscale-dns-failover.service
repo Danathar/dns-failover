@@ -1,0 +1,13 @@
+[Unit]
+Description=Disable Tailscale DNS override during ControlD outage
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/root/.config/tailscale-dns-failover/config.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/tailscale-dns-failover
+StateDirectory=tailscale-dns-failover
+StateDirectoryMode=0700
+TimeoutStartSec=75
+UMask=0077

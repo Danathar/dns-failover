@@ -1,0 +1,21 @@
+# Independent encrypted backup using Cloudflare Families.
+resolution_type: GETDNS_RESOLUTION_STUB
+dns_transport_list:
+  - GETDNS_TRANSPORT_TLS
+tls_authentication: GETDNS_AUTHENTICATION_REQUIRED
+tls_query_padding_blocksize: 128
+edns_client_subnet_private: 1
+idle_timeout: 10000
+timeout: 2000
+tls_connection_retries: 1
+tls_backoff_time: 60
+listen_addresses:
+  - 127.0.0.1@5454
+round_robin_upstreams: 1
+upstream_recursive_servers:
+  - address_data: 1.1.1.3
+    tls_port: 853
+    tls_auth_name: "family.cloudflare-dns.com"
+  - address_data: 1.0.0.3
+    tls_port: 853
+    tls_auth_name: "family.cloudflare-dns.com"

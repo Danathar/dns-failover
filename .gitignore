@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+config.json
+state.json
+servers.conf
+*.local
+*.local.*
+*.bak
+*.log
+backups/
+secrets/
+credentials/
+# Copy templates to these local filenames when customizing them.
+stubby-primary.yml
+dnsmasq.conf

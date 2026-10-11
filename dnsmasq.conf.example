@@ -1,0 +1,15 @@
+# Merge these settings into your existing dnsmasq configuration.
+# This example is intentionally loopback-only and has no DHCP configuration.
+# Add your server's LAN address to listen-address to serve network clients.
+listen-address=127.0.0.1
+bind-interfaces
+no-resolv
+servers-file=/run/dns-upstream/servers.conf
+cache-size=1000
+stop-dns-rebind
+bogus-priv
+domain-needed
+# Debian supplies this file; use your distribution's current trust anchors.
+conf-file=/usr/share/dnsmasq/trust-anchors.conf
+dnssec
+# Keep your existing local names, DHCP settings, and reservations separately.

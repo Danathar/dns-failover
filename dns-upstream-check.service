@@ -1,0 +1,12 @@
+[Unit]
+Description=Select healthy encrypted upstream for house DNS
+Wants=stubby.service stubby-fallback.service network-online.target
+After=stubby.service stubby-fallback.service network-online.target
+Before=dnsmasq.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dns-upstream-check
+RuntimeDirectory=dns-upstream
+RuntimeDirectoryPreserve=yes
+TimeoutStartSec=15

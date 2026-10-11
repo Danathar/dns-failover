@@ -1,0 +1,10 @@
+[Unit]
+Description=Check ControlD for Tailscale DNS failover
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=20s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
