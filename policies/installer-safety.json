@@ -9,8 +9,8 @@
                     "why": "the installer must run under `set -eu` so a failed `dnsmasq --test` aborts before the config is installed"
                 },
                 {
-                    "pattern": "dnsmasq --test --conf-file=\"\\$config\"",
-                    "why": "the reviewed config must be checked with `dnsmasq --test --conf-file=\"$config\"` before it is installed"
+                    "pattern": "^\\s*dnsmasq --test --conf-file=\"\\$config\"\\s*$",
+                    "why": "the reviewed config must be checked by a standalone `dnsmasq --test --conf-file=\"$config\"` command before it is installed (not as an if/negated condition, which `set -e` does not abort on)"
                 },
                 {
                     "pattern": "^if ! /usr/share/dnsmasq/systemd-helper checkconfig \\|\\| ! systemctl restart dnsmasq\\.service; then",
@@ -37,12 +37,16 @@
                 {
                     "pattern": "\\bsudo\\b",
                     "why": "the installer runs as root and must not shell out to sudo"
+                },
+                {
+                    "pattern": "(?:\\b(?:if|elif|while|until)\\b|!|&&|\\|\\|)[^\\n]*dnsmasq --test",
+                    "why": "`dnsmasq --test` must be a standalone command; as a condition or in a list a failure does not abort the installer under `set -e`"
                 }
             ],
             "everyAfter": [
                 {
                     "pattern": "^\\s*install -m 0644 \"\\$config\" /etc/dnsmasq\\.conf",
-                    "after": "dnsmasq --test --conf-file=\"\\$config\"",
+                    "after": "^\\s*dnsmasq --test --conf-file=\"\\$config\"\\s*$",
                     "why": "the reviewed config must be installed only after `dnsmasq --test` passes"
                 },
                 {

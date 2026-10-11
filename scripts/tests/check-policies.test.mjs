@@ -711,6 +711,13 @@ test('installer-safety: checkconfig removed, downloads and sudo fail', () => {
     assert.ok(mutated('install-dns-failover.sh', 'systemctl daemon-reload', 'sudo systemctl daemon-reload').length > 0);
 });
 
+test('installer-safety: conditional, negated and listed dnsmasq --test forms fail', () => {
+    const t = 'dnsmasq --test --conf-file="$config"';
+    for (const to of [`if ${t}; then :; fi`, `! ${t}`, `${t} && true`, `${t} || echo ignored`]) {
+        assert.ok(mutated('install-dns-failover.sh', t + '\n', to + '\n').length > 0, to);
+    }
+});
+
 test('installer-safety: commented-out guards do not count', () => {
     const v = mutated('install-dns-failover.sh', 'dnsmasq --test --conf-file="$config"\n', '# dnsmasq --test --conf-file="$config"\n');
     assert.match(v.join('\n'), /dnsmasq --test/);

@@ -30,8 +30,8 @@
                 "tests/e2e/run.sh",
                 "python3 -m coverage run -m pytest && python3 -m coverage report",
                 "node scripts/check-policies.mjs",
-                "node --test scripts/tests/",
-                "node --test .claude/hooks/tests/"
+                "node --test 'scripts/tests/*.test.mjs'",
+                "node --test '.claude/hooks/tests/*.test.mjs'"
             ],
             "review": "owner"
         },
@@ -84,7 +84,7 @@
             "required_commands": [
                 "python3 -m pytest",
                 "ruff check .",
-                "node --test scripts/tests/"
+                "node --test 'scripts/tests/*.test.mjs'"
             ],
             "review": "ci"
         }
