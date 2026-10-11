@@ -51,6 +51,8 @@ jobs:
         run: |
           python3 --version
           python3 -m coverage --version
+          # Debian 12 ships coverage 6.5, which reads pyproject.toml (and so the
+          # fail_under floor) only when tomli is importable; fail if it is not.
           python3 -c "import tomli"
           python3 -m coverage run -m pytest
           python3 -m coverage report
