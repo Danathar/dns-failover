@@ -1,0 +1,78 @@
+name: Auto issues
+
+# When `CI` fails, times out or fails to start on a push to main, open one
+# tracking issue, or comment on it if it is already open. Until this file
+# existed nothing told anyone that main had gone red.
+#
+# Deliberately small:
+#   - It never checks out or runs repository code and uses no third-party
+#     action. The only thing it runs is `gh`, which is preinstalled.
+#   - It never closes an issue. Recovery is a human's call.
+#   - `workflow_run` always runs the copy of this file on the default branch,
+#     so a pull request cannot change what it does.
+#   - Pull request runs of CI also complete with a conclusion; only a push
+#     to main is a red main, so those are ignored.
+#
+# `workflows:` lists the `name:` of .github/workflows/ci.yml, which is `CI`.
+# Renaming that workflow silently disconnects this one; keep them in step.
+# Issues are filed in this repository only (`GH_REPO` below). See AGENTS.md.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# Two failures arriving together must not both see "no issue yet" and each
+# open one. Queue, never cancel: a cancelled run is a failure nobody was told
+# about. `queue: max` is required for that: by default a group holds only one
+# pending run and a newer one replaces it.
+concurrency:
+  group: auto-issues
+  cancel-in-progress: false
+  queue: max
+
+# Write access is granted per job, not here.
+permissions: {}
+
+jobs:
+  main-red:
+    # A timed-out or never-started run leaves main unverified just as a red one
+    # does. `cancelled` is not reported: a newer push superseding a run is normal.
+    if: contains(fromJSON('["failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion) && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          # Event fields are attacker-influenced (a commit message is whatever
+          # its author wrote), so they reach the shell only as env vars.
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+        run: |
+          set -euo pipefail
+          TITLE="${WORKFLOW_NAME} failing on main"
+          export TITLE
+          subject=${COMMIT_MESSAGE%%$'\n'*}
+          # Indented code block: whatever the subject contains stays text.
+          # shellcheck disable=SC2016 # backticks in the template are literal Markdown
+          body=$(printf 'The `%s` workflow ended with conclusion `%s` on a push to `main` on %s.\n\nCommit: %s\nRun: %s\n\nFirst line of the commit message:\n\n    %s\n\nThis issue is not closed automatically; close it once `main` is green again.\n' \
+            "$WORKFLOW_NAME" "$CONCLUSION" "$(date -u +%Y-%m-%d)" "$HEAD_SHA" "$RUN_URL" "$subject")
+          # List rather than search: the search index lags, and `in:title` is a
+          # word match, not an exact one. Match the exact title AND the Actions
+          # bot as author, so an issue anyone else opens with this title is
+          # never the one a failure is reported into.
+          existing=$(gh issue list --repo "$GH_REPO" --state open --limit 1000 --json number,title,author \
+            --jq '[.[] | select(.title == env.TITLE and (.author.login == "app/github-actions" or .author.login == "github-actions[bot]" or .author.login == "github-actions"))][0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GH_REPO" --body "$body"
+          else
+            gh issue create --repo "$GH_REPO" --title "$TITLE" --body "$body"
+          fi

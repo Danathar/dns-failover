@@ -1,0 +1,139 @@
+name: Nightly compliance
+
+# Re-runs the contract checks against main every night so that slow drift (a
+# new Debian point release, a new ruff or shellcheck, a changed container
+# image) is noticed without a pull request: the Python unit tests on Debian 12
+# and 13, ruff, shellcheck, the policy-as-code checker, the node script and
+# hook tests, and the container end-to-end test. On a scheduled failure it
+# opens or updates ONE tracking issue in this repository (GH_REPO below) and
+# never closes it.
+#
+# Nothing here touches a real DNS host: the unit tests use fakes and temp
+# directories, and the e2e test (tests/e2e/run.sh) runs the installer and the
+# checker only inside a throwaway container. No installer, configure.py,
+# monitor.py, systemctl or Tailscale API call is made from this workflow.
+#
+# The jobs repeat the commands of ci.yml and policy-check.yml rather than
+# calling them. Container images come from public.ecr.aws, never Docker Hub.
+
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-compliance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit tests (debian ${{ matrix.debian }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: public.ecr.aws/docker/library/debian:${{ matrix.debian }}
+    strategy:
+      fail-fast: false
+      matrix:
+        debian: ['12', '13']
+    steps:
+      - name: Install python3, pytest and git
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3 python3-pytest python3-coverage git ca-certificates
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Run unit tests with the coverage floor
+        run: |
+          python3 --version
+          python3 -m coverage run -m pytest
+          python3 -m coverage report
+
+  lint:
+    name: Lint (ruff, shellcheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: ruff
+        env:
+          RUFF_VERSION: 0.15.22
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet "ruff==${RUFF_VERSION}"
+          "$RUNNER_TEMP/venv/bin/ruff" --version
+          "$RUNNER_TEMP/venv/bin/ruff" check .
+
+      - name: shellcheck
+        run: |
+          shellcheck --version
+          git ls-files -z '*.sh' | xargs -0 shellcheck
+
+  policies:
+    name: Policies and repo-meta tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Policy-as-code, script tests, hook tests
+        run: |
+          node scripts/check-policies.mjs
+          node --test scripts/tests/
+          node --test .claude/hooks/tests/
+
+  e2e:
+    name: E2E (debian container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Run end-to-end test in a throwaway container
+        run: tests/e2e/run.sh
+
+  report:
+    name: Open or update the tracking issue
+    needs: [unit, lint, policies, e2e]
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'Nightly compliance failing'
+          UNIT: ${{ needs.unit.result }}
+          LINT: ${{ needs.lint.result }}
+          POLICIES: ${{ needs.policies.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          set -euo pipefail
+          failed=""
+          for pair in "unit tests:$UNIT" "ruff/shellcheck:$LINT" "policies and repo-meta tests:$POLICIES" "e2e:$E2E"; do
+            [ "${pair#*:}" = "success" ] || failed="$failed ${pair%%:*} (${pair#*:});"
+          done
+          body=$(printf 'The nightly compliance run failed on %s.\n\nChecks that did not pass:%s\n\nRun: %s/%s/actions/runs/%s\n\nThis issue is not closed automatically; close it once the nightly is green.\n' \
+            "$(date -u +%Y-%m-%d)" "$failed" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+          existing=$(gh issue list --repo "$GH_REPO" --state open --limit 1000 --json number,title,author \
+            --jq '[.[] | select(.title == env.TITLE and (.author.login == "app/github-actions" or .author.login == "github-actions[bot]" or .author.login == "github-actions"))][0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment --repo "$GH_REPO" "$existing" --body "$body"
+          else
+            gh issue create --repo "$GH_REPO" --title "$TITLE" --body "$body"
+          fi

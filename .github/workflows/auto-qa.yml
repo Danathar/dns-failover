@@ -1,0 +1,96 @@
+name: Auto-QA
+
+# Weekly self-tuning of the coverage floor (`fail_under` under
+# [tool.coverage.report] in pyproject.toml). Measures coverage of the Python
+# unit tests exactly as coverage-gate.yml does (coverage.py under pytest in a
+# Debian container), runs
+# scripts/auto-qa-tuner.mjs (rules in .github/auto-qa-tuning.json) and reports
+# in the step summary. When a raise is warranted it opens or updates ONE
+# tracking issue holding the proposed diff. It never pushes a commit and never
+# lowers a floor: a human applies the diff in a pull request.
+#
+# Two jobs so the privileged step stays small: `measure` runs repository code
+# with a read-only token; `report` has `issues: write`, runs no repository
+# code, and only reads the issue body the first job produced.
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: auto-qa
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure and propose
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: public.ecr.aws/docker/library/debian:13
+    outputs:
+      raise: ${{ steps.tune.outputs.raise }}
+    steps:
+      - name: Install pytest, coverage and node
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3 python3-pytest python3-coverage nodejs ca-certificates git
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Measure coverage
+        # Same measurement as .github/workflows/coverage-gate.yml. The floor is
+        # not enforced here (--fail-under=0): this job only reports headroom.
+        run: |
+          python3 -m coverage run -m pytest
+          python3 -m coverage json --fail-under=0 -o coverage.json
+
+      - name: Propose floors
+        id: tune
+        run: |
+          set -o pipefail
+          node scripts/auto-qa-tuner.mjs --out-dir auto-qa-out | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auto-qa-out
+          path: auto-qa-out
+          if-no-files-found: error
+
+  report:
+    name: Open or update the tracking issue
+    needs: measure
+    if: needs.measure.outputs.raise == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: auto-qa-out
+          path: auto-qa-out
+
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: 'Auto-QA: coverage floor can be raised'
+        run: |
+          set -euo pipefail
+          # List rather than search (the search index lags and in:title is a
+          # word match). Match the exact title AND the Actions bot as author so
+          # an issue someone else opens with this title is never reused.
+          existing=$(gh issue list --repo "$GH_REPO" --state open --limit 1000 --json number,title,author \
+            --jq '[.[] | select(.title == env.TITLE and (.author.login == "app/github-actions" or .author.login == "github-actions[bot]" or .author.login == "github-actions"))][0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue edit --repo "$GH_REPO" "$existing" --body-file auto-qa-out/issue-body.md
+            gh issue comment --repo "$GH_REPO" "$existing" --body "Proposal refreshed by run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+          else
+            gh issue create --repo "$GH_REPO" --title "$TITLE" --body-file auto-qa-out/issue-body.md
+          fi
