@@ -82,8 +82,8 @@ ruff check .                       # lint, config in pyproject.toml
 git ls-files '*.sh' | xargs shellcheck   # config in .shellcheckrc
 tests/e2e/run.sh                   # throwaway podman/docker container
 python3 -m coverage run -m pytest && python3 -m coverage report   # floor: fail_under in pyproject.toml
-node --test scripts/tests/         # repo-meta script tests
-node --test .claude/hooks/tests/   # hook tests
+node --test 'scripts/tests/*.test.mjs'         # repo-meta script tests
+node --test '.claude/hooks/tests/*.test.mjs'   # hook tests
 node scripts/check-policies.mjs    # policy-as-code
 ```
 

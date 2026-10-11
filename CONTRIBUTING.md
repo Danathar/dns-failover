@@ -40,8 +40,8 @@ node scripts/check-policies.mjs
 If you touched an installer, a unit file or the dnsmasq/Stubby configs, also
 run `tests/e2e/run.sh`. For coverage:
 `python3 -m coverage run -m pytest && python3 -m coverage report`. If you
-touched `scripts/` or `.claude/hooks/`, run `node --test scripts/tests/` and
-`node --test .claude/hooks/tests/`. CI (`ci.yml`, `coverage-gate.yml`,
+touched `scripts/` or `.claude/hooks/`, run `node --test 'scripts/tests/*.test.mjs'` and
+`node --test '.claude/hooks/tests/*.test.mjs'`. CI (`ci.yml`, `coverage-gate.yml`,
 `policy-check.yml`, `agent-tooling.yml` in `.github/workflows/`) runs the same
 checks. Add or update a test for each behaviour change and update the README
 if user-visible behaviour or configuration changes.

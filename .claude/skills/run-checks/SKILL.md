@@ -19,8 +19,8 @@ Also, when relevant:
   (needs podman or docker; runs in a throwaway container).
 - Product code changed: `python3 -m coverage run -m pytest && python3 -m coverage report`.
 - Agent docs, policies or workflows changed: `node scripts/check-policies.mjs`.
-- `scripts/` or `.claude/hooks/` changed: `node --test scripts/tests/` and
-  `node --test .claude/hooks/tests/`.
+- `scripts/` or `.claude/hooks/` changed: `node --test 'scripts/tests/*.test.mjs'` and
+  `node --test '.claude/hooks/tests/*.test.mjs'`.
 
 Any `gh` write command: pass `--repo Danathar/dns-failover`.
 

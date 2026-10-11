@@ -20,7 +20,7 @@
 - [ ] `tests/e2e/run.sh` (required if an installer, unit file or dnsmasq/Stubby config changed)
 - [ ] `python3 -m coverage run -m pytest && python3 -m coverage report` (if product code changed)
 - [ ] `node scripts/check-policies.mjs` (if agent docs, policies or workflows changed)
-- [ ] `node --test scripts/tests/` and `node --test .claude/hooks/tests/` (if scripts or hooks changed)
+- [ ] `node --test 'scripts/tests/*.test.mjs'` and `node --test '.claude/hooks/tests/*.test.mjs'` (if scripts or hooks changed)
 - [ ] Added/updated a test for each behaviour change
 - [ ] README updated if behaviour or configuration changed
 
