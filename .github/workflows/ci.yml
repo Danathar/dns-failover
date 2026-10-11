@@ -62,6 +62,9 @@ jobs:
           - name: debian 13
             image: public.ecr.aws/docker/library/debian:13
     container: ${{ matrix.image }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Install Python and pytest
         run: |
@@ -81,6 +84,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container: public.ecr.aws/docker/library/debian:12
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout code
         uses: actions/checkout@v5

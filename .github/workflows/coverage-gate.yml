@@ -22,6 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container: public.ecr.aws/docker/library/debian:12
+    defaults:
+      run:
+        # Container jobs default to sh (dash on Debian); pipefail needs bash.
+        shell: bash
     steps:
       - name: Install Python, pytest and coverage
         run: |
