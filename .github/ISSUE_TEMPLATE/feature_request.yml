@@ -34,5 +34,5 @@ body:
     attributes:
       label: Safety
       options:
-        - label: This does not remove the fail-safe behaviour (keep selection when both upstreams fail, restore on failed install, 3-failure threshold, `auto_restore` default false)
+        - label: I understand that changing a fail-safe behaviour or threshold (keep selection when both upstreams fail, restore on failed install, 3-failure threshold, `auto_restore` default false) needs explicit owner approval and a README update
           required: true
