@@ -67,11 +67,19 @@ start_upstream() { # name port example-ip cloudflare-ip
         --pid-file="$WORK/$1.pid" --log-facility="$WORK/$1.log"
 }
 
+# A killed daemon is reparented to PID 1, which in a CI job container does not
+# reap children, so it lingers as a zombie that `kill -0` still accepts.
+alive() {
+    local state
+    state=$(awk '{print $3}' "/proc/$1/stat" 2>/dev/null) || return 1
+    [ -n "$state" ] && [ "$state" != Z ]
+}
+
 stop_upstream() {
     local pid
     pid=$(cat "$WORK/$1.pid")
     kill "$pid"
-    while kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
+    while alive "$pid"; do sleep 0.1; done
 }
 
 selected() {
