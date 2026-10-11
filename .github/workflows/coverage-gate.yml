@@ -1,0 +1,47 @@
+name: Coverage gate
+
+# Measures line coverage of the product Python files under the unit tests and
+# fails a pull request or a push to main when it drops below `fail_under` in
+# pyproject.toml ([tool.coverage.report]). Raise the floor when coverage rises.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: coverage-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    name: Coverage gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: public.ecr.aws/docker/library/debian:12
+    steps:
+      - name: Install Python, pytest and coverage
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3 python3-pytest python3-coverage
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Measure coverage
+        run: python3 -m coverage run -m pytest
+
+      - name: Enforce floor
+        run: |
+          set -o pipefail
+          python3 -m coverage report | tee report.txt
+
+      - name: Publish table
+        if: always()
+        run: |
+          if [ -s report.txt ]; then
+            { echo '```'; cat report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
