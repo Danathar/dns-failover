@@ -1,0 +1,69 @@
+# PR acceptance metrics (issue #17).
+#
+# Once a week (and on demand) lists this repository's pull requests with the
+# GitHub CLI, feeds the JSON to scripts/pr-metrics.mjs and publishes the result
+# as the run's step summary plus a `pr-metrics` artifact (markdown + JSON).
+#
+# Read-only on purpose: nothing is committed, no issue or comment is created.
+# Dated snapshots under docs/metrics/ are produced by hand with the command in
+# docs/metrics/README.md. Definitions: docs/metrics.md.
+name: PR metrics
+
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch:
+    inputs:
+      window_days:
+        description: 'Length of the recent window, in days'
+        required: false
+        default: '30'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-metrics
+  cancel-in-progress: false
+
+jobs:
+  metrics:
+    # A scheduled run on someone else's fork would only report that fork.
+    if: github.repository == 'Danathar/dns-failover'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      WINDOW_DAYS: ${{ inputs.window_days || '30' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: List pull requests
+        run: |
+          gh pr list --repo "$GH_REPO" --state all --limit 500 \
+            --json number,author,state,createdAt,mergedAt,closedAt,labels,title \
+            > prs.json
+
+      - name: Compute metrics
+        run: |
+          node scripts/pr-metrics.mjs --input prs.json \
+            --window-days "$WINDOW_DAYS" --json-out pr-metrics.json \
+            > pr-metrics.md
+          cat pr-metrics.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload metrics
+        uses: actions/upload-artifact@v6
+        with:
+          name: pr-metrics
+          path: |
+            pr-metrics.md
+            pr-metrics.json
+          retention-days: 90
