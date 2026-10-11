@@ -63,7 +63,7 @@ jobs:
 
       - name: ruff
         env:
-          RUFF_VERSION: 0.15.22
+          RUFF_VERSION: 0.16.1
         run: |
           python3 -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install --quiet "ruff==${RUFF_VERSION}"
