@@ -4,6 +4,7 @@ import getpass
 import json
 import os
 from pathlib import Path
+
 from monitor import Client, resolver_id
 
 path = Path('/root/.config/tailscale-dns-failover/config.json')

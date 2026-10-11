@@ -16,3 +16,11 @@ credentials/
 # Copy templates to these local filenames when customizing them.
 stubby-primary.yml
 dnsmasq.conf
+
+# Test, lint and coverage caches.
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
