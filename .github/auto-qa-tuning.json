@@ -1,0 +1,9 @@
+{
+    "$comment": "Tunable QA rules read by scripts/auto-qa-tuner.mjs (.github/workflows/auto-qa.yml). Tuning never lowers a floor automatically and never commits: raises are proposed in a tracking issue and applied by a human.",
+    "coverage": {
+        "summary": "coverage.json",
+        "raise_floor_when_headroom_exceeds": 5,
+        "buffer_below_measured": 3,
+        "note": "summary is the coverage.py JSON report (python3 -m coverage json). The floor is fail_under under [tool.coverage.report] in pyproject.toml, in percentage points of total coverage. Headroom is measured minus floor. When it exceeds raise_floor_when_headroom_exceeds the proposed floor is floor(measured - buffer_below_measured); it is never above that and never below the current floor."
+    }
+}

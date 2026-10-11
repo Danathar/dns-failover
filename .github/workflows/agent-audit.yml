@@ -1,0 +1,83 @@
+name: Agent audit trail
+
+# Reads back, weekly, who wrote and who merged each agent pull request, using
+# scripts/ai-audit-report.mjs (tests: scripts/tests/ai-audit-report.test.mjs).
+#
+# Agent PRs here are opened by the Hive GitHub App (`app/danathar-atomic-hive`)
+# and end with a signature line `— hive: agent=<name> ...`. For each one the
+# script checks: a linked issue (GitHub's resolved closingIssuesReferences, not body text), the signature line,
+# a merger that is a human or the Hive App itself (the hive-serialized lane, reported separately; any other bot or an unknown merger is a violation), and base `main` of
+# Danathar/dns-failover. The result goes to the run summary.
+#
+# Failure model: a violation fails the run (`--strict`). It does not open an
+# issue. A red scheduled run is already visible in the Actions tab and in
+# GitHub's failure notifications, and keeping the token read-only (no
+# `issues: write`) means a bug here cannot write anything. A run that audited
+# zero agent PRs passes but says so at the top of the summary, because Hive may
+# be paused and an empty window is not evidence of compliance.
+#
+# Triggers: weekly and manual, not every push to main; the audit reads merged
+# PRs, so it adds nothing per push and `auto-issues.yml` already covers a red
+# main. `GH_REPO` pins every `gh` call to Danathar/dns-failover
+# (AGENTS.md).
+
+on:
+  schedule:
+    - cron: '17 5 * * 1' # Mondays 05:17 UTC; covers the previous 8 days
+  workflow_dispatch:
+    inputs:
+      since:
+        description: Audit PRs merged on or after this date (YYYY-MM-DD). Blank means the last 8 days.
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: agent-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Audit merged agent pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SINCE: ${{ inputs.since }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SINCE" ]; then
+            SINCE="$(date -u -d '8 days ago' +%F)"
+          fi
+          # The script validates the date too; failing here gives a clear error
+          # before any API call.
+          case "$SINCE" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+            *) echo "::error::since must be YYYY-MM-DD, got '$SINCE'"; exit 2 ;;
+          esac
+          if [ "$(date -u -d "$SINCE" +%F 2>/dev/null || true)" != "$SINCE" ]; then
+            echo "::error::since must be a real date, got '$SINCE'"; exit 2
+          fi
+          # `commits` is left out of --json on purpose: with --limit 500 it
+          # exceeds GitHub's GraphQL node limit, and the audit does not read it.
+          gh pr list --repo "$GH_REPO" --state merged --limit 500 --search "merged:>=$SINCE" \
+            --json number,title,author,body,mergedAt,mergedBy,labels,url,baseRefName,closingIssuesReferences > merged.json
+          # --limit makes the script refuse a list that may be truncated.
+          node scripts/ai-audit-report.mjs --input merged.json --since "$SINCE" \
+            --limit 500 --strict --output report.md && status=0 || status=$?
+          if [ -f report.md ]; then cat report.md >> "$GITHUB_STEP_SUMMARY"; fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error::agent audit exited $status (1 = audit-trail violation, 2 = bad or truncated input); see the run summary"
+          fi
+          exit "$status"
