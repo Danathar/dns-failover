@@ -1,0 +1,38 @@
+[project]
+name = "dns-failover"
+version = "0.0.0"
+description = "dnsmasq/Stubby/Tailscale DNS failover helpers"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-or-later" }
+# Standard library only; nothing is built or published from this file. It
+# exists so pytest, ruff and coverage read one shared configuration.
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tailscale-dns-failover"]
+python_files = ["test_*.py"]
+# configure.py and test_monitor.py import the sibling `monitor` module.
+pythonpath = ["tailscale-dns-failover"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 130
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, import order, bugbear, pyupgrade, simplify-free basics.
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.coverage.run]
+include = [
+    "dns-upstream-check.py",
+    "dns-upstream-probe.py",
+    "tailscale-dns-failover/configure.py",
+    "tailscale-dns-failover/monitor.py",
+]
+branch = false
+
+[tool.coverage.report]
+fail_under = 74
+show_missing = true
+skip_empty = true
