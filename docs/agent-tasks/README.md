@@ -5,7 +5,7 @@ that produced it, and how this directory records that going forward. Rules for
 agents are in [`AGENTS.md`](../../AGENTS.md); how several agents share the
 repository is in [`multi-agent.md`](../multi-agent.md).
 
-Every `gh` command here passes `--repo Danathar/dns-failover`.
+Every `gh` example here targets this repository: commands pass `--repo Danathar/dns-failover`, and read-only `gh api` examples name it in the endpoint path.
 
 ## What a ledger is
 

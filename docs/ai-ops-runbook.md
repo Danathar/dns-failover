@@ -11,8 +11,9 @@ against the live API), `dns-upstream-check.py` against real paths, or
 `systemctl` actions "to see what happens". Reproduce with the unit tests or in a
 throwaway container (`tests/e2e/run.sh`). The commands in the last two sections
 read the server's state; they are **owner-run commands, run by the owner on the
-server, never by an agent**. Every `gh` command here passes
-`--repo Danathar/dns-failover`.
+server, never by an agent**. Every `gh` example here targets this repository: write
+commands pass `--repo Danathar/dns-failover`; read-only `gh api` examples name it
+in the endpoint path.
 
 | signal or need | section |
 |---|---|
@@ -177,7 +178,9 @@ should not have been. The commands below are **owner-run, on the server**.
 
 ```bash
 sudo systemctl disable --now tailscale-dns-failover.timer   # stop tailnet override changes
+sudo systemctl stop tailscale-dns-failover.service          # a run already in flight
 sudo systemctl disable --now dns-upstream-check.timer       # freeze the selection
+sudo systemctl stop dns-upstream-check.service
 ```
 
 Both timers are this project's own; disabling them leaves the last
@@ -212,8 +215,17 @@ added one, and any Hive tokens. `ci.yml` needs no secret.
 3. Remove it from the visible surface: edit or delete the comment or issue body;
    for a commit, a revert does not remove it from history, so the owner decides
    about rewriting history of a branch (never of `main` without a plan).
-4. Replace it with `gh secret set <NAME> --repo Danathar/dns-failover`, run by
-   the owner so the value is never in a transcript.
+4. Replace it where it lives, run by the owner so the value is never in a
+   transcript:
+   - **Workflow credential** (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`):
+     `gh secret set <NAME> --repo Danathar/dns-failover`.
+   - **Tailscale OAuth secret:** revoke the client in the Tailscale admin
+     console, create a new one, then on the server stop
+     `tailscale-dns-failover.timer`, remove the root-only
+     `/root/.config/tailscale-dns-failover/config.json` and re-run
+     `configure.py` as the owner (it refuses to overwrite an existing file), or
+     edit the file in place, then re-enable the timer. Never done by an agent.
+   - **Hive token:** rotate it in Hive or the GitHub App settings.
 5. Record it in the day's ledger without the value.
 
 ## A runaway agent

@@ -8,8 +8,7 @@ codebase guide. This page is about how the agents fit together, not about how
 to write the code.
 
 It holds no counts, because they go stale. Where a fact can change, a command
-shows the current answer. Every `gh` command passes
-`--repo Danathar/dns-failover`, so it does the same thing from any clone or
+shows the current answer. Every `gh` example targets this repository: commands pass `--repo Danathar/dns-failover`, and read-only `gh api` examples name it in the endpoint path, so it does the same thing from any clone or
 worktree.
 
 ## Rule 1: the host rule
