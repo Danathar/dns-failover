@@ -9,9 +9,11 @@
 # That is acceptable here, and avoids a privileged trigger. The job is skipped
 # for fork PRs so they do not show a red check.
 #
-# Labels (`area/*`: local-dns, tailscale, installer, systemd, tests, ci, docs, agents, governance) missing from the repository are created on first use (default
-# colour, no description); `sync-labels` removes a label when its
-# paths are no longer touched. Issues are not labeled by path; they have none.
+# Labels (`area/*`) must exist before they are applied, so the first step
+# creates any missing ones from .github/labeler.yml (`gh label create`
+# fails harmlessly for labels that exist, so existing colours are kept). `sync-labels`
+# removes a label when its paths are no longer touched. Issues are not labeled
+# by path; they have none.
 
 name: Labeler
 
@@ -31,10 +33,24 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      issues: write
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v5
+
+      - name: Ensure the area labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          grep -oE "^'area/[a-z-]+'" .github/labeler.yml | tr -d "'" | while read -r label; do
+            gh label create "$label" --repo "$GH_REPO" --color 1d76db --description "Changes under $label paths (labeler)" 2>/dev/null \
+              || echo "$label already exists"
+          done
+
       - uses: actions/labeler@v5
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
