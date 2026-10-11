@@ -90,8 +90,8 @@ jobs:
       - name: Policy-as-code, script tests, hook tests
         run: |
           node scripts/check-policies.mjs
-          node --test scripts/tests/
-          node --test .claude/hooks/tests/
+          node --test 'scripts/tests/*.test.mjs'
+          node --test '.claude/hooks/tests/*.test.mjs'
 
   e2e:
     name: E2E (debian container)
