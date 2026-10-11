@@ -151,13 +151,19 @@ export function checkRepoTarget(root, policy, files) {
                     );
                 }
             }
-            const cmds = findWriteCommands(t, policy.writeCommandPattern);
-            if (cmds.length > 0 && !repoRe.test(t)) {
-                v.push(
-                    `${f}:${line}: "${cmds[0]}" without ${literal} ` +
-                        `(a bare gh command targets whatever repository the clone defaults to)`,
-                );
-            }
+            // Judge each write command on its own segment, so one --repo does
+            // not cover every command on the line.
+            const starts = [...t.matchAll(new RegExp(policy.writeCommandPattern, 'g'))].map((m) => m.index);
+            starts.forEach((from, n) => {
+                const seg = t.slice(from, starts[n + 1] ?? t.length);
+                if (!repoRe.test(seg)) {
+                    const cmd = seg.match(new RegExp(policy.writeCommandPattern))[0];
+                    v.push(
+                        `${f}:${line}: "${cmd}" without ${literal} ` +
+                            `(a bare gh command targets whatever repository the clone defaults to)`,
+                    );
+                }
+            });
         }
     }
     return v;
@@ -535,7 +541,7 @@ export function checkWorkflows(root, policy, files) {
 
         if (policy.ghWriteNeedsRepo) v.push(...checkGhScope(f, code, policy));
         if (policy.forbiddenRunExpressions) {
-            v.push(...checkRunExpressions(f, code, policy));
+            v.push(...checkRunExpressions(f, lines, policy));
         }
     }
     return v;

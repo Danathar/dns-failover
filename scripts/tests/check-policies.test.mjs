@@ -846,3 +846,15 @@ test('risk tiers: a pipe in a command is escaped in the table and compared unesc
     assert.deepEqual(checkRiskTiers(cfg, row), []);
     assert.match(checkRiskTiers(cfg, TABLE).join('\n'), /xargs shellcheck/);
 });
+
+test('run expressions: a " # " inside a quoted run scalar does not hide an event expression', () => {
+    const wf = GOOD_WF + '      - run: "echo # ${{ github.event.issue.title }}"\n';
+    assert.match(run({ '.github/workflows/a.yml': wf }).join('\n'), /github\.event\.issue\.title/);
+});
+
+test('repo-target: one --repo does not cover a second gh write on the same line', () => {
+    const ok = 'gh pr create --repo Danathar/dns-failover && gh pr merge 3 --repo Danathar/dns-failover\n';
+    assert.deepEqual(run({ 'docs/a.md': ok }), []);
+    const v = run({ 'docs/a.md': 'gh pr create --repo Danathar/dns-failover && gh pr merge 3\n' });
+    assert.ok(v.some((x) => /"gh pr merge" without/.test(x)), v.join('|'));
+});
