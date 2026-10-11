@@ -20,7 +20,7 @@ commands under "Where to look".
 | CI jobs | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (workflow `CI`): jobs `Lint`, `Unit tests (debian 12)`, `Unit tests (debian 13)`, `E2E (debian container)` | `ruff check .`, the Python unit tests (`python3 -m pytest`, which includes the offline `tailscale-dns-failover/test_monitor.py`) on Debian 12 (Python 3.11) and Debian 13, and the end-to-end test in a throwaway container (`tests/e2e/run.sh`) | yes, all four |
 | coverage gate | [`.github/workflows/coverage-gate.yml`](../.github/workflows/coverage-gate.yml) (job `Coverage gate`), floor in `[tool.coverage.report] fail_under` of [`pyproject.toml`](../pyproject.toml) | line coverage of the product code under the unit tests has not dropped below the floor (`python3 -m coverage run -m pytest && python3 -m coverage report`) | yes |
 | policy check | [`.github/workflows/policy-check.yml`](../.github/workflows/policy-check.yml) (job `policy-check`), `scripts/check-policies.mjs`, [`policies/`](../policies) | the repository still satisfies its machine-checkable policies: workflow permissions, `--repo` on every documented `gh` write, and the other rules in `policies/`; `node scripts/check-policies.mjs` runs it locally | yes |
-| agent tooling | [`.github/workflows/agent-tooling.yml`](../.github/workflows/agent-tooling.yml) (job `agent-tooling`) | `node --test .claude/hooks/tests/` and `node --test scripts/tests/`: the command-gate hook (including the host rule) still refuses what it must, and the repo-meta scripts still behave | yes |
+| agent tooling | [`.github/workflows/agent-tooling.yml`](../.github/workflows/agent-tooling.yml) (job `agent-tooling`) | `node --test '.claude/hooks/tests/*.test.mjs'` and `node --test 'scripts/tests/*.test.mjs'`: the command-gate hook (including the host rule) still refuses what it must, and the repo-meta scripts still behave | yes |
 | PR metrics | [`.github/workflows/pr-metrics.yml`](../.github/workflows/pr-metrics.yml), definitions in [metrics.md](metrics.md), readings in [metrics/](metrics/README.md) | acceptance rate and time to merge, by author class | no, report only |
 | auto-QA | `.github/workflows/auto-qa.yml`, rules in `.github/auto-qa-tuning.json` | weekly: when the coverage floor can be raised, one issue with the proposed diff; it never pushes and never lowers the floor | no, report only |
 | agent audit | `.github/workflows/agent-audit.yml`, `scripts/ai-audit-report.mjs` | weekly: each merged agent PR has a linked issue, the signature line and an acceptable merger | no, scheduled |
@@ -77,11 +77,11 @@ gh pr list --repo Danathar/dns-failover --state all --limit 500 \
 python3 -m pytest && ruff check .
 python3 -m coverage run -m pytest && python3 -m coverage report
 node scripts/check-policies.mjs
-node --test scripts/tests/ .claude/hooks/tests/
+node --test 'scripts/tests/*.test.mjs' '.claude/hooks/tests/*.test.mjs'
 ```
 
 The first reading of the PR metrics is
-[metrics/2026-10-11.md](metrics/2026-10-11.md): no pull requests existed yet,
+[metrics/2026-10-11.md](metrics/2026-10-11.md): six pull requests existed, all open (the ACMM rollout),
 so every rate in it is `n/a`.
 
 ## Known weak spots

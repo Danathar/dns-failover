@@ -92,7 +92,7 @@ days. It has read-only permissions and commits nothing. Runs are listed at
   count is the signal to look at.
 - Small samples: with fewer than about ten decided PRs in a window, treat
   percentages as anecdotes. The repository is young: the first snapshot
-  ([2026-10-11](metrics/2026-10-11.md)) has no PR at all, so every
+  ([2026-10-11](metrics/2026-10-11.md)) has no decided PR at all, so every
   rate in it is `n/a`.
 
 ## Not measured
