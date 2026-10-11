@@ -1,0 +1,84 @@
+{
+    "$comment": "Guards the invariants of install-dns-failover.sh that keep a bad dnsmasq.conf from taking DNS down. Evaluated by scripts/check-policies.mjs (checkFileRules; comment lines ignored). See docs/security/SECURITY-AI.md, section 'The installer'.",
+    "files": [
+        {
+            "path": "install-dns-failover.sh",
+            "required": [
+                {
+                    "pattern": "^\\s*set -eu\\s*$",
+                    "why": "the installer must run under `set -eu` so a failed `dnsmasq --test` aborts before the config is installed"
+                },
+                {
+                    "pattern": "^\\s*dnsmasq --test --conf-file=\"\\$config\"\\s*$",
+                    "why": "the reviewed config must be checked by a standalone `dnsmasq --test --conf-file=\"$config\"` command before it is installed (not as an if/negated condition, which `set -e` does not abort on)"
+                },
+                {
+                    "pattern": "^if ! /usr/share/dnsmasq/systemd-helper checkconfig \\|\\| ! systemctl restart dnsmasq\\.service; then",
+                    "why": "the installed config must be validated with systemd-helper checkconfig and a dnsmasq restart, with a failure branch"
+                },
+                {
+                    "pattern": "^\\s*cp -a /etc/dnsmasq\\.conf \"\\$backup\"",
+                    "why": "the original /etc/dnsmasq.conf must be backed up"
+                }
+            ],
+            "forbidden": [
+                {
+                    "pattern": "\\bset\\s+\\+e\\b",
+                    "why": "`set +e` lets a failed `dnsmasq --test` fall through to the install"
+                },
+                {
+                    "pattern": "dnsmasq --test[^\\n]*(?:\\|\\||;\\s*(?:true|:))",
+                    "why": "a failed `dnsmasq --test` must not be ignored"
+                },
+                {
+                    "pattern": "\\b(?:curl|wget)\\b",
+                    "why": "the installer installs only reviewed local files and downloads nothing"
+                },
+                {
+                    "pattern": "\\bsudo\\b",
+                    "why": "the installer runs as root and must not shell out to sudo"
+                },
+                {
+                    "pattern": "(?:\\b(?:if|elif|while|until)\\b|!|&&|\\|\\|)[^\\n]*dnsmasq --test",
+                    "why": "`dnsmasq --test` must be a standalone command; as a condition or in a list a failure does not abort the installer under `set -e`"
+                }
+            ],
+            "everyAfter": [
+                {
+                    "pattern": "^\\s*install -m 0644 \"\\$config\" /etc/dnsmasq\\.conf",
+                    "after": "^\\s*dnsmasq --test --conf-file=\"\\$config\"\\s*$",
+                    "why": "the reviewed config must be installed only after `dnsmasq --test` passes"
+                },
+                {
+                    "pattern": "^\\s*install -m 0644 \"\\$config\" /etc/dnsmasq\\.conf",
+                    "after": "^\\s*cp -a /etc/dnsmasq\\.conf \"\\$backup\"",
+                    "why": "the backup must exist before the config is replaced"
+                },
+                {
+                    "pattern": "systemd-helper checkconfig",
+                    "after": "^\\s*install -m 0644 \"\\$config\" /etc/dnsmasq\\.conf",
+                    "why": "checkconfig must run on the installed config"
+                },
+                {
+                    "pattern": "^\\s*install -m 0644 \"\\$backup\" /etc/dnsmasq\\.conf",
+                    "after": "^\\s*install -m 0644 \"\\$config\" /etc/dnsmasq\\.conf",
+                    "why": "the backup is restored only after the new config was installed"
+                }
+            ],
+            "followedWithin": [
+                {
+                    "pattern": "^\\s*install -m 0644 \"\\$backup\" /etc/dnsmasq\\.conf",
+                    "expect": "^\\s*exit\\s+[1-9]",
+                    "within": 3,
+                    "why": "a restore of the backup must restart dnsmasq and then exit non-zero"
+                },
+                {
+                    "pattern": "^\\s*install -m 0644 \"\\$backup\" /etc/dnsmasq\\.conf",
+                    "expect": "systemctl restart dnsmasq\\.service",
+                    "within": 2,
+                    "why": "a restore of the backup must restart dnsmasq so the old config is live again"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "$comment": "Workflow hygiene for .github/workflows. Evaluated by scripts/check-policies.mjs. See docs/security/SECURITY-AI.md.",
+    "workflowGlobs": [
+        ".github/workflows/*.yml",
+        ".github/workflows/*.yaml"
+    ],
+    "requireTopLevelPermissions": true,
+    "forbiddenTriggers": [
+        "pull_request_target"
+    ],
+    "trustedActionOwners": [
+        "actions",
+        "github"
+    ],
+    "pinPattern": "^[0-9a-f]{40}$",
+    "ghWriteNeedsRepo": true,
+    "ghWriteCommandPattern": "\\bgh\\s+(?:(?:pr|issue|release|workflow|label)\\s+(?:create|comment|edit|close|reopen|merge|review|delete|run|enable|disable|ready|upload|delete-asset|lock|unlock|transfer|pin|unpin|update-branch|revert|clone|develop)|run\\s+(?:rerun|cancel|delete))\\b",
+    "allowedRepoValues": [
+        "${{ github.repository }}",
+        "Danathar/dns-failover"
+    ],
+    "forbidTopLevelWrite": true,
+    "forbiddenRunExpressions": "\\bgithub\\.event\\.(?!(?:number|action|issue\\.number|pull_request\\.(?:number|head\\.sha|base\\.sha)|repository\\.(?:name|full_name|default_branch))(?![\\w.]))|\\bgithub\\.head_ref\\b|\\bgithub\\.ref_name\\b|\\binputs\\."
+}
