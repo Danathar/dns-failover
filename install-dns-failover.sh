@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-stage=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+stage=$(CDPATH="" cd -- "$(dirname -- "$0")" && pwd)
 if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
     echo "Usage: $0 /absolute/path/to/reviewed-dnsmasq.conf" >&2
     exit 1

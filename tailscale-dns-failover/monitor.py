@@ -7,7 +7,6 @@ import copy
 import ipaddress
 import json
 import os
-from pathlib import Path
 import runpy
 import secrets
 import struct
@@ -16,6 +15,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 CONFIG = Path('/root/.config/tailscale-dns-failover/config.json')
 STATE = Path('/var/lib/tailscale-dns-failover/state.json')

@@ -1,0 +1,4 @@
+# ShellCheck configuration, read automatically by shellcheck locally and by the
+# Lint job in .github/workflows/ci.yml. The installers are POSIX sh (their
+# shebang selects the dialect); tests/e2e scripts are bash and say so.
+source-path=SCRIPTDIR
