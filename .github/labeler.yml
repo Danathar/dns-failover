@@ -1,4 +1,7 @@
 # Path to label map for actions/labeler v5 (.github/workflows/labeler.yml).
+# Labels missing from the repository are created by the first step of
+# labeler.yml before it applies them (colour 1d76db); create them by hand first
+# to choose another colour.
 
 'area/local-dns':
   - changed-files:
