@@ -1,0 +1,96 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "permissions": {
+        "allow": [
+            "Bash(python3 -m pytest:*)",
+            "Bash(python3 -m coverage run -m pytest)",
+            "Bash(python3 -m coverage report)",
+            "Bash(ruff check .)",
+            "Bash(shellcheck:*)",
+            "Bash(bash -n:*)",
+            "Bash(tests/e2e/run.sh)",
+            "Bash(node --test '.claude/hooks/tests/*.test.mjs')",
+            "Bash(node --test 'scripts/tests/*.test.mjs')",
+            "Bash(node scripts/check-policies.mjs)",
+            "Bash(git status:*)",
+            "Bash(git diff:*)",
+            "Bash(git log:*)",
+            "Bash(git show:*)",
+            "Bash(git branch:*)",
+            "Bash(git ls-files:*)"
+        ],
+        "ask": [
+            "Bash(git push:*)",
+            "Edit(.github/workflows/**)",
+            "Write(.github/workflows/**)",
+            "Edit(.github/CODEOWNERS)",
+            "Write(.github/CODEOWNERS)",
+            "Edit(.github/rulesets/**)",
+            "Write(.github/rulesets/**)",
+            "Edit(.claude/settings.json)",
+            "Write(.claude/settings.json)",
+            "Edit(.claude/hooks/**)",
+            "Write(.claude/hooks/**)",
+            "Edit(policies/**)",
+            "Write(policies/**)",
+            "Edit(scripts/check-policies.mjs)",
+            "Write(scripts/check-policies.mjs)",
+            "Edit(risk-config.json)",
+            "Write(risk-config.json)",
+            "Edit(LICENSE)",
+            "Write(LICENSE)",
+            "Edit(AGENTS.md)",
+            "Write(AGENTS.md)",
+            "Edit(install-dns-failover.sh)",
+            "Write(install-dns-failover.sh)",
+            "Edit(tailscale-dns-failover/install.sh)",
+            "Write(tailscale-dns-failover/install.sh)",
+            "Edit(tailscale-dns-failover/configure.py)",
+            "Write(tailscale-dns-failover/configure.py)",
+            "Edit(tailscale-dns-failover/monitor.py)",
+            "Write(tailscale-dns-failover/monitor.py)",
+            "Edit(dns-upstream-check.py)",
+            "Write(dns-upstream-check.py)",
+            "Edit(*.service)",
+            "Write(*.service)",
+            "Edit(*.timer)",
+            "Write(*.timer)"
+        ],
+        "deny": [
+            "Bash(git push --force:*)",
+            "Bash(git push -f:*)",
+            "Bash(git push --force-with-lease:*)",
+            "Bash(git reset --hard:*)",
+            "Bash(sudo:*)",
+            "Bash(doas:*)",
+            "Bash(pkexec:*)",
+            "Bash(su:*)",
+            "Bash(systemctl:*)",
+            "Bash(service:*)",
+            "Bash(./install-dns-failover.sh:*)",
+            "Bash(install-dns-failover.sh:*)",
+            "Bash(bash install-dns-failover.sh:*)",
+            "Bash(sh install-dns-failover.sh:*)",
+            "Bash(./tailscale-dns-failover/install.sh:*)",
+            "Bash(bash tailscale-dns-failover/install.sh:*)",
+            "Bash(sh tailscale-dns-failover/install.sh:*)",
+            "Bash(python3 tailscale-dns-failover/configure.py:*)",
+            "Bash(./tailscale-dns-failover/configure.py:*)",
+            "Bash(python3 tailscale-dns-failover/monitor.py:*)",
+            "Bash(./tailscale-dns-failover/monitor.py:*)"
+        ]
+    },
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.mjs\""
+                    }
+                ]
+            }
+        ]
+    }
+}
