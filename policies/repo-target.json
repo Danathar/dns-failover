@@ -1,0 +1,32 @@
+{
+    "$comment": "Keeps every agent's gh write commands on Danathar/dns-failover. Evaluated by scripts/check-policies.mjs. See docs/security/SECURITY-AI.md, section 'Repository target'.",
+    "requiredLiteral": "--repo Danathar/dns-failover",
+    "directionGlobs": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".github/copilot-instructions.md",
+        ".cursor/rules/**",
+        ".github/prompts/**/*.md",
+        ".claude/skills/**/*.md",
+        ".claude/memory/README.md",
+        "docs/security/SECURITY-AI.md",
+        "docs/ai-ops-runbook.md",
+        "docs/multi-agent.md",
+        "docs/agent-boundaries.md"
+    ],
+    "scanGlobs": [
+        "*.md",
+        "docs/**/*.md",
+        ".github/**/*.md",
+        ".claude/**/*.md",
+        "policies/**/*.md"
+    ],
+    "excludeGlobs": [],
+    "writeCommandPattern": "\\bgh\\s+(?:(?:pr|issue|release|workflow|label)\\s+(?:create|comment|edit|close|reopen|merge|review|delete|run|enable|disable|ready|upload|delete-asset|lock|unlock|transfer|pin|unpin|update-branch|revert|clone|develop)|run\\s+(?:rerun|cancel|delete))\\b",
+    "repoFlagPattern": "(?:--repo|-R)[ =]Danathar/dns-failover(?![\\w.-])",
+    "forbiddenPatterns": [
+        "\\bgh\\s+(?:(?:pr|issue|release|workflow|label)\\s+(?:create|comment|edit|close|reopen|merge|review|delete|run|enable|disable|ready|upload|delete-asset|lock|unlock|transfer|pin|unpin|update-branch|revert|clone|develop)|run\\s+(?:rerun|cancel|delete))\\b[^\\n]*?(?:--repo|-R)[ =](?!Danathar/dns-failover(?![\\w.-]))[\\w.-]+/[\\w.-]+",
+        "GH_REPO=(?!Danathar/dns-failover(?![\\w.-]))[\\w.-]+/[\\w.-]+",
+        "gh\\s+repo\\s+set-default\\s+(?!Danathar/dns-failover(?![\\w.-]))\\S+"
+    ]
+}

@@ -1,0 +1,40 @@
+# Default owner for everything.
+* @Danathar
+
+# Tier 1 (critical) paths from docs/risk-tiers.md and risk-config.json.
+# Keep this list in step with that table; scripts/check-policies.mjs fails
+# when an owner-review path is missing here. docs/agent-boundaries.md explains it.
+/.github/workflows/                             @Danathar
+/.github/CODEOWNERS                             @Danathar
+/.github/rulesets/                              @Danathar
+/.claude/settings.json                          @Danathar
+/.claude/hooks/                                 @Danathar
+/policies/                                      @Danathar
+/scripts/check-policies.mjs                     @Danathar
+/risk-config.json                               @Danathar
+/LICENSE                                        @Danathar
+/AGENTS.md                                      @Danathar
+/install-dns-failover.sh                        @Danathar
+/tailscale-dns-failover/install.sh              @Danathar
+/tailscale-dns-failover/configure.py            @Danathar
+/tailscale-dns-failover/monitor.py              @Danathar
+/dns-upstream-check.py                          @Danathar
+
+# Tier 2 (high) paths.
+/dns-upstream-probe.py                          @Danathar
+*.service                                       @Danathar
+*.timer                                         @Danathar
+dnsmasq-*.conf                                  @Danathar
+*.conf.example                                  @Danathar
+stubby-*.yml                                    @Danathar
+stubby-*.yml.example                            @Danathar
+/pyproject.toml                                 @Danathar
+/CLAUDE.md                                      @Danathar
+/.github/copilot-instructions.md                @Danathar
+/.cursor/rules/                                 @Danathar
+/.github/prompts/                               @Danathar
+/.claude/skills/                                @Danathar
+/.claude/memory/                                @Danathar
+/docs/risk-tiers.md                             @Danathar
+/docs/agent-boundaries.md                       @Danathar
+/docs/security/                                 @Danathar

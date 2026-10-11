@@ -1,0 +1,92 @@
+{
+    "$comment": "docs/risk-tiers.md is the source; this file restates its tier table as data. scripts/check-policies.mjs fails when the two disagree (tier number, name, paths, required commands, review) and when .github/CODEOWNERS lacks an entry for a path whose review is owner. Tier 1 is the MOST dangerous tier. Paths are input to a classifier, not the classifier: tier is set by what a change can break, so a reviewer's judgment can raise a tier above the path match but never lower it below. A path glob cannot see inside a file, so a change to the safety-relevant parts of a Tier 2 or Tier 3 file (see docs/risk-tiers.md, 'Raise the tier') is raised by that rule. The `**/` prefix matches a file at any depth, including the repository root.",
+    "owner": "@Danathar",
+    "default_tier": 3,
+    "tiers": [
+        {
+            "tier": 1,
+            "name": "critical",
+            "paths": [
+                ".github/workflows/**",
+                ".github/CODEOWNERS",
+                ".github/rulesets/**",
+                ".claude/settings.json",
+                ".claude/hooks/**",
+                "policies/**",
+                "scripts/check-policies.mjs",
+                "risk-config.json",
+                "LICENSE",
+                "AGENTS.md",
+                "install-dns-failover.sh",
+                "tailscale-dns-failover/install.sh",
+                "tailscale-dns-failover/configure.py",
+                "tailscale-dns-failover/monitor.py",
+                "dns-upstream-check.py"
+            ],
+            "required_commands": [
+                "python3 -m pytest",
+                "ruff check .",
+                "git ls-files '*.sh' | xargs shellcheck",
+                "tests/e2e/run.sh",
+                "python3 -m coverage run -m pytest && python3 -m coverage report",
+                "node scripts/check-policies.mjs",
+                "node --test scripts/tests/",
+                "node --test .claude/hooks/tests/"
+            ],
+            "review": "owner"
+        },
+        {
+            "tier": 2,
+            "name": "high",
+            "paths": [
+                "dns-upstream-probe.py",
+                "**/*.service",
+                "**/*.timer",
+                "**/dnsmasq-*.conf",
+                "**/*.conf.example",
+                "**/stubby-*.yml",
+                "**/stubby-*.yml.example",
+                "pyproject.toml",
+                "CLAUDE.md",
+                ".github/copilot-instructions.md",
+                ".cursor/rules/**",
+                ".github/prompts/**",
+                ".claude/skills/**",
+                ".claude/memory/**",
+                "docs/risk-tiers.md",
+                "docs/agent-boundaries.md",
+                "docs/security/**"
+            ],
+            "required_commands": [
+                "python3 -m pytest",
+                "ruff check .",
+                "git ls-files '*.sh' | xargs shellcheck",
+                "node scripts/check-policies.mjs"
+            ],
+            "review": "owner"
+        },
+        {
+            "tier": 3,
+            "name": "standard",
+            "paths": [
+                "tests/**",
+                "scripts/**",
+                "docs/**",
+                "*.md",
+                ".github/ISSUE_TEMPLATE/**",
+                ".github/pull_request_template.md",
+                ".github/labeler.yml",
+                ".github/auto-qa-tuning.json",
+                ".editorconfig",
+                ".shellcheckrc",
+                ".gitignore"
+            ],
+            "required_commands": [
+                "python3 -m pytest",
+                "ruff check .",
+                "node --test scripts/tests/"
+            ],
+            "review": "ci"
+        }
+    ]
+}
