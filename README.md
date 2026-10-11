@@ -63,7 +63,7 @@ time. Tailscale setting changes also take time to reach devices.
 | `tailscale-dns-failover/monitor.py` | Checks the Tailscale ControlD profile over HTTPS. Uses the Tailscale API to disable override after repeated failure and optionally restore it after recovery. | Automatically through `tailscale-dns-failover.timer`, 20 seconds after each run finishes. |
 | `tailscale-dns-failover/configure.py` | Prompts for an OAuth client ID and secret, reads Tailscale DNS settings, discovers the ControlD profile, and saves root-only configuration. Refuses to overwrite an existing file. | Manually during credential setup. |
 | `tailscale-dns-failover/install.sh` | Installs the Tailscale monitor and its systemd units. Does not enable its timer. | Manually during installation or an update. |
-| `tailscale-dns-failover/test_monitor.py` | Runs 18 offline regression tests for outage thresholds, recovery timing, API response handling, profile matching, and preservation of other DNS settings. Makes no real API changes. | Manually during development or before installation. |
+| `tailscale-dns-failover/test_monitor.py` | Runs 18 offline regression tests for outage thresholds, recovery timing, API response handling, profile matching, and preservation of other DNS settings. Makes no real API changes. | Collected by `python3 -m pytest` (still runs with `python3 -m unittest -v` inside `tailscale-dns-failover`). Manually during development or before installation. |
 
 Installed program names are `/usr/local/sbin/dns-upstream-check` and
 `/usr/local/sbin/tailscale-dns-failover`. These are copies of the two monitors,
@@ -213,13 +213,30 @@ local DNS available away from home can have different filtering from ControlD.
 
 ## Run tests
 
+From the repository root (Python 3.11 or newer; `pytest`, `ruff`, `shellcheck`
+and `coverage` are development tools only, the product code uses just the
+standard library):
+
 ```sh
-cd tailscale-dns-failover
-python3 -m unittest -v
+python3 -m pytest                                          # all unit tests
+ruff check .                                               # lint (config in pyproject.toml)
+git ls-files -z '*.sh' | xargs -0 shellcheck               # shell lint (config in .shellcheckrc)
+python3 -m coverage run -m pytest && python3 -m coverage report   # coverage floor from pyproject.toml
+tests/e2e/run.sh                                           # end-to-end test in a throwaway container
 ```
 
-The tests use fake API responses and do not need credentials. Live health and
-API access are checked separately with the installed monitor's `--dry-run`.
+The unit tests use fake `dig` output, fake API responses, temporary directories
+and a fake `/proc`; they need no credentials, network, root access or running
+services. `tests/e2e/run.sh` starts a Debian container (podman or docker) in
+which real dnsmasq processes act as the two upstreams and a frontend, and the
+real `dns-upstream-check.py` switches between them. Neither touches the host's
+DNS, systemd units or Tailscale. Live health and API access are checked
+separately with the installed monitor's `--dry-run`, by a person, on the
+server.
+
+Contributors, human or AI agent, should read [CONTRIBUTING.md](CONTRIBUTING.md)
+and [AGENTS.md](AGENTS.md) first; they cover the checks above and what must
+never be run on the host.
 
 ## What was removed for sharing
 
