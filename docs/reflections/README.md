@@ -62,4 +62,4 @@ written `Owner/repo#N`.
 
 | Entry | Subject |
 |---|---|
-| [2026-10-11-lessons-from-openaudible-autoupdate-followups](2026-10-11-lessons-from-openaudible-autoupdate-followups.md) | What the follow-up issues after the same ACMM rollout on `Danathar/openaudible-autoupdate` taught, applied here before starting |
+| [2026-10-11-lessons-from-openaudible-autoupdate-followups](2026-10-11-lessons-from-openaudible-autoupdate-followups.md) | What the follow-up issues after the same ACMM rollout on `Danathar/openaudible-autoupdate` showed, and what they changed here |

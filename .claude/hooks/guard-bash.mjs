@@ -1261,11 +1261,14 @@ const PRIVILEGE = new Set(['sudo', 'doas', 'pkexec', 'run0', 'su']);
 const CONTAINER_ENTER = new Set(['distrobox', 'distrobox-enter', 'distrobox-host-exec', 'toolbox']);
 const CONTAINER_ENGINES = new Set(['podman', 'docker', 'nerdctl']);
 const NET_CLIENTS = new Set(['curl', 'wget', 'http', 'https', 'xh', 'xhs', 'aria2c']);
-// Commands whose arguments xargs would append at run time: no check here sees the real command line.
-const XARGS_OPAQUE = (cmd) =>
-    cmd === 'git' || cmd === 'node' || cmd === 'nodejs' || SHELLS.has(cmd) || isPython(cmd) || isPytest(cmd) ||
-    cmd === 'coverage' || cmd === 'systemctl' || cmd === 'service' || cmd === 'tailscale' || cmd === 'pkill' ||
-    cmd === 'killall' || NET_CLIENTS.has(cmd);
+// Under xargs the command line gains words read at run time, which no check here
+// sees. Only commands that are read-only whatever their arguments are may run under
+// xargs; everything else (gh, git, node, python, the checker, curl, ...) is refused.
+const XARGS_SAFE = new Set([
+    'shellcheck', 'grep', 'egrep', 'fgrep', 'cat', 'wc', 'ls', 'head', 'tail', 'sort', 'uniq', 'echo', 'printf', 'true',
+    'basename', 'dirname', 'stat', 'file',
+]);
+const XARGS_OPAQUE = (cmd) => !XARGS_SAFE.has(cmd);
 
 // Scripts that change the live host or call the live Tailscale API.
 const INSTALLERS = new Set(['install-dns-failover.sh', 'install-dns-failover', 'install.sh', 'in-container.sh']);
@@ -1458,9 +1461,53 @@ function checkSystemctl(args) {
 }
 
 function checkService(args) {
-    const words = args.filter((a) => !a.startsWith('-'));
-    if (args.includes('--status-all') || words[1] === 'status') return null;
-    return block('Blocked: `service` actions other than `status` would start, stop or reload system services (dnsmasq, stubby) on the host.');
+    // Only the standalone `service --status-all` is read-only. `service NAME ACTION`
+    // (even `status`) and any extra word beside --status-all (`service dnsmasq
+    // restart --status-all`) are refused.
+    if (args.length === 1 && args[0] === '--status-all') return null;
+    return block('Blocked: `service` is only allowed as exactly `service --status-all`; any other form can start, stop or reload system services (dnsmasq, stubby) on the host.');
+}
+
+// Options a throwaway `run`/`create` may carry before the image. Anything else is
+// refused (--privileged, --volumes-from, --pid/--network/--ipc/--uts/--userns=host,
+// --cap-add, --device, --security-opt, ...): --network=host would collide with the
+// host's real Stubby listeners on 127.0.0.1:5453/5454 and --pid=host would let
+// dns-upstream-check.py signal the host's dnsmasq. Value: false = flag, null = a value.
+const CONTAINER_RUN_OPTIONS = {
+    '--rm': false, '-i': false, '-t': false, '-it': false, '-ti': false, '--interactive': false, '--tty': false,
+    '-w': null, '--workdir': null, '-e': null, '--env': null, '--name': null,
+    '-v': null, '--volume': null, '--mount': null,
+};
+
+function checkContainerRun(cmd, sub, args, state) {
+    const at = args.indexOf(sub);
+    const opts = [];
+    for (let i = at + 1; i < args.length; i++) {
+        const a = args[i];
+        if (!a.startsWith('-') || a === '-') break; // the image: everything after it is the container's command
+        const eq = a.indexOf('=');
+        const name = a.startsWith('--') && eq !== -1 ? a.slice(0, eq) : a;
+        const attached = /^-[vwe]./.test(a) ? a.slice(0, 2) : null;
+        const key = attached ?? name;
+        if (!Object.hasOwn(CONTAINER_RUN_OPTIONS, key)) {
+            const why = /^--privileged/.test(a) ? 'gives the container the host; the e2e harness needs no privileges' :
+                `is not on the allowlist (${Object.keys(CONTAINER_RUN_OPTIONS).join(' ')}); it could share the host's namespaces, volumes or devices`;
+            return block(`Blocked: \`${cmd} ${sub} ${a}\` ${why}.`);
+        }
+        if (CONTAINER_RUN_OPTIONS[key] === null) {
+            if (attached) opts.push(a);
+            else if (a.startsWith('--') && eq !== -1) opts.push(a);
+            else {
+                if (args[i + 1] === undefined) return block(`Blocked: \`${cmd} ${sub} ${a}\` has no value.`);
+                opts.push(a, args[++i]);
+            }
+        } else opts.push(a);
+    }
+    const mount = hostMountRefusal(opts, state);
+    if (mount !== undefined) {
+        return block(`Blocked: \`${cmd} ${sub}\` mounts ${mount || '(unparseable)'} from the host; only the project (or temp dirs) may be mounted.`);
+    }
+    return null;
 }
 
 /** dnsmasq and stubby run only to validate a configuration and exit. */
@@ -1670,7 +1717,7 @@ function checkSegment(words, state) {
     // `printf '%s\n' --output=FILE | xargs git log`, `printf '%s\n' +n -c CMD | xargs bash -n`
     // and `echo https://api.tailscale.com/... | xargs curl` reach commands with
     // arguments this hook never sees, under the allow rules and checks below.
-    if (xargsFed && XARGS_OPAQUE(cmd)) {
+    if (xargsFed && XARGS_OPAQUE(cmd) && !PRIVILEGE.has(cmd)) {
         return block(
             `Blocked: \`xargs ${cmd}\`; xargs adds arguments read at run time, so this hook cannot check the ` +
                 `${cmd} command line the allow rules pre-approve. Write the ${cmd} command out in full instead.`
@@ -1810,15 +1857,8 @@ function checkSegment(words, state) {
             return block(`Blocked: \`${cmd} ${sub}\` enters an existing container, possibly the real distrobox one; use \`${cmd} run\` with a throwaway container.`);
         }
         if (sub === 'run' || sub === 'create') {
-            // The installers run inside the container as root: a mount of the
-            // host's /etc, /run or / (or --privileged) would make that the host.
-            if (args.some((a) => a === '--privileged' || a.startsWith('--privileged='))) {
-                return block(`Blocked: \`${cmd} ${sub} --privileged\` gives the container the host; the e2e harness needs no privileges.`);
-            }
-            const mount = hostMountRefusal(args, here);
-            if (mount !== undefined) {
-                return block(`Blocked: \`${cmd} ${sub}\` mounts ${mount || '(unparseable)'} from the host; only the project (or temp dirs) may be mounted.`);
-            }
+            const refused = checkContainerRun(cmd, sub, args, here);
+            if (refused) return refused;
         }
         // A container run that names a protected script is exempt only when it
         // is the e2e harness (a path containing tests/e2e).

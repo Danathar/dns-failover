@@ -1,4 +1,4 @@
-# What the follow-up issues on openaudible-autoupdate taught, applied here before starting
+# What the follow-up issues on openaudible-autoupdate showed, and what they changed here
 
 **Date:** 2026-10-11
 **Context:** the ACMM gap issues on this repository are being worked as parallel
@@ -8,7 +8,11 @@ then Hive agents filed eight follow-up issues against what had merged
 (`#60`, `#62`, `#65`, `#67`, `#69`, `#71`, `#73`, `#75`), each fixed by a pull
 request (`#63`, `#64`, `#66`, `#68`, `#70`, `#72`, `#74`, `#76`). This is what
 those showed, read with `gh issue view` and `gh pr view` on that repository,
-and what was done here before writing any code. An earlier reflection on the
+and which changes here they informed. Sequence, as it happened: the hook and its
+tests were first ported from that repository's final `main` (which already
+contains `#64`, `#66`, `#68`, `#72`); the follow-up issues and pull requests
+were read afterwards, and the changes marked "after reading" below came from
+that reading. An earlier reflection on the
 tududi rollout (`Danathar/openaudible-autoupdate`,
 `docs/reflections/2026-10-09-acmm-lessons-from-tududi.md`) covered the first
 round; this one covers the second.
@@ -52,9 +56,10 @@ round; this one covers the second.
   docs had gone stale, four pointing at a closing `fi`, a blank line or a
   comment. The fix named the code instead and added a test that fails on a new
   bare line number.
-- **Here, before starting.** This repository's hook was ported from the
-  final `main` of that repository, not from the first rollout, so `#64`, `#66`,
-  `#68` and `#72` are inherited rather than rediscovered. The corpus file is
+- **Here.** This repository's hook was ported first, from the final `main` of
+  that repository rather than the first rollout, so `#64`, `#66`, `#68` and
+  `#72` are inherited rather than rediscovered; that part was not informed by
+  reading the issues. The corpus file is
   byte-identical (sha256 `8a4bf0f7...cf71`, pinned by the test). Of its 29
   rows, 24 apply to this repository's allow rules and 18 of those are refuse
   rows; the gate refuses 5 and `KNOWN_GAPS` names the other 13, so the table is
@@ -71,6 +76,17 @@ round; this one covers the second.
   search all of stderr, including the fixed guidance footer that mentions
   `tests/e2e`, `dnsmasq/stubby` and the Tailscale API; here it matches only the
   specific reason, so those fragments can no longer pass vacuously.
+
+- **After reading, and after Codex review of this PR.** The pytest option
+  allowlist, the on-disk exemption for the checker and the matcher change
+  described above were written as the class-level answer to `#60`/`#65`/`#71`,
+  but two review rounds on this PR still found the same class again: container
+  `run` options (`--volumes-from`, host namespaces), `service` argument forms,
+  and `gh`/the checker under `xargs`. They were fixed by inverting to
+  allowlists (container `run` options, `service --status-all` only, a short
+  read-only list for `xargs`) instead of adding cases. The first version's
+  one-case-per-example `PUSH_DANGER`/mount handling is the pattern the
+  reflection warns about.
 
 ## What it shows
 
