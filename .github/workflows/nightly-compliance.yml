@@ -1,17 +1,22 @@
 name: Nightly compliance
 
 # Re-runs the contract checks against main every night so that slow drift (a
-# new Debian point release, a new ruff or shellcheck, a changed container
-# image) is noticed without a pull request: the Python unit tests on Debian 12
-# and 13, ruff, shellcheck, the policy-as-code checker, the node script and
-# hook tests, and the container end-to-end test. On a scheduled failure it
-# opens or updates ONE tracking issue in this repository (GH_REPO below) and
-# never closes it.
+# new Debian point release, a changed container image, a new package in the
+# Debian archive) is noticed without a pull request: the Python unit tests on
+# Debian 12 and 13, ruff, shellcheck, the policy-as-code checker, the node
+# script and hook tests, and the container end-to-end test. On a scheduled
+# failure it opens or updates ONE tracking issue in this repository (GH_REPO
+# below) and never closes it.
+#
+# ruff and shellcheck are pinned to the same versions as ci.yml. A failure here
+# must mean main is broken under the gates that merged it, not that the runner
+# image shipped a different linter.
 #
 # Nothing here touches a real DNS host: the unit tests use fakes and temp
-# directories, and the e2e test (tests/e2e/run.sh) runs the installer and the
-# checker only inside a throwaway container. No installer, configure.py,
-# monitor.py, systemctl or Tailscale API call is made from this workflow.
+# directories, and the e2e test (tests/e2e/in-container.sh) runs the checker
+# against real dnsmasq only inside this throwaway job container. No installer,
+# configure.py, monitor.py, systemctl or Tailscale API call is made from this
+# workflow.
 #
 # The jobs repeat the commands of ci.yml and policy-check.yml rather than
 # calling them. Container images come from public.ecr.aws, never Docker Hub.
@@ -73,6 +78,18 @@ jobs:
           "$RUNNER_TEMP/venv/bin/pip" install --quiet "ruff==${RUFF_VERSION}"
           "$RUNNER_TEMP/venv/bin/ruff" --version
           "$RUNNER_TEMP/venv/bin/ruff" check .
+
+      - name: Install pinned shellcheck
+        # Same version and checksum as the Lint job in ci.yml; keep them in step.
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/shellcheck.tar.xz" \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-${SHELLCHECK_VERSION}" >> "$GITHUB_PATH"
 
       - name: shellcheck
         run: |
