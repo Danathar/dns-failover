@@ -41,7 +41,7 @@ fi
 
 cleanup() {
     for f in "$WORK"/*.pid; do
-        [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null || true
+        if [ -f "$f" ]; then kill "$(cat "$f")" 2>/dev/null || true; fi
     done
     rm -rf "$WORK"
 }
