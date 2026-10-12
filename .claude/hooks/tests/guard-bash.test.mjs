@@ -448,6 +448,16 @@ const hostAllowed = [
     `podman run --rm -v ${PROJECT}:/src:ro,Z debian:12 sh /src/tests/e2e/in-container.sh`,
     `docker run --rm --mount type=bind,source=${PROJECT},target=/src debian:12 sh /src/tests/e2e/in-container.sh`,
     'podman run --rm debian:12 true',
+    'podman run --rm -v ./tests:/t:ro,Z debian:12 true',
+    'podman run --rm -v "${PWD}/tests":/t:ro,Z debian:12 true',
+    'podman run --rm -v myvol:/data debian:12 true',
+    'docker --host unix:///var/run/docker.sock ps',
+    'git push --follow-tags origin main',
+    'git push --set-upstream origin acmm/x',
+    'git push --dry-run origin main',
+    'git push --no-verify origin acmm/x',
+    'git branch',
+    'git branch --list "acmm/*"',
 ];
 
 const hostBlocked = [
@@ -766,6 +776,31 @@ const hostBlocked = [
     ['podman run --rm --mount type=bind,source=/run,target=/run debian:12 true', 'mounts /run'],
     ['docker run --rm -v/var/run/docker.sock:/s debian:12 true', 'mounts'],
     ['podman create -v /etc:/e debian:12 true', 'mounts /etc'],
+    // mount sources the shell expands or resolves against the working directory
+    ['cd /etc && podman run -v "$PWD":/etc debian:12 sh tests/e2e/in-container.sh', 'mounts'],
+    ['podman run -v ~/../etc:/etc debian:12 sh tests/e2e/in-container.sh', 'mounts'],
+    ['podman run -v $HOME:/h debian:12 true', 'mounts'],
+    ['podman run -v ../x:/x debian:12 true', 'mounts'],
+    ['podman run -v "$PWD/..":/x debian:12 true', 'mounts'],
+    ['cd /tmp && podman run -v .:/x debian:12 true', 'mounts'],
+    ['podman run --mount type=bind,source=$HOME,target=/h debian:12 true', 'mounts'],
+    // global options with values must not hide the subcommand
+    ['docker --host unix:///var/run/docker.sock exec dev ls', 'exec'],
+    ['podman --connection remote exec dev ls', 'exec'],
+    ['docker -H unix:///x attach dev', 'attach'],
+    ['docker --host unix:///x run --privileged debian:12 true', 'privileged'],
+    ['docker --config /x run -v /etc:/e debian:12 true', 'mounts /etc'],
+    // git push: deleting remote refs, and abbreviated long options git would accept
+    ['git push --delete origin main', 'deleting remote refs'],
+    ['git push origin --delete main', 'deleting remote refs'],
+    ['git push -d origin main', 'git push -d'],
+    ['git push origin :main', 'deletes a remote ref'],
+    ['git push --prune origin', 'deleting remote refs'],
+    ['git push --del origin main', 'deleting remote refs'],
+    ['git push --force-w origin main', 'force push'],
+    ['git push --force-if origin main', 'force push'],
+    ['git push --mirr origin', 'overwrites the remote'],
+    ['git push --rep=https://example.com/x.git main', 'redirects the push'],
 ];
 
 test('pytest is refused when the payload says the shell is outside the project', () => {

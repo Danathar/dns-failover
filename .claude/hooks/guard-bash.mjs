@@ -788,19 +788,31 @@ function checkGitConfig(rest) {
     return null;
 }
 
+// Long `git push` options that force, mirror, delete or redirect. git accepts any
+// unambiguous abbreviation of a long option (`--force-w`, `--del`, `--mirr`), so a
+// word that is a prefix of one of these is refused, not just the full spelling.
+const PUSH_DANGER = [
+    ['--force', 'force push'], ['--force-with-lease', 'force push'], ['--force-if-includes', 'force push'],
+    ['--mirror', '`git push --mirror` overwrites the remote'], ['--delete', 'deleting remote refs'],
+    ['--prune', 'deleting remote refs (--prune)'], ['--repo', '`git push --repo` redirects the push; name the remote `origin` instead'],
+];
+
 function checkGitPush(rest) {
     const positionals = [];
     for (let i = 0; i < rest.length; i++) {
         const a = rest[i];
-        if (['-o', '--push-option', '--receive-pack', '--exec'].includes(a)) i++;
-        else if (a === '--repo' || a.startsWith('--repo=')) {
-            return block('Blocked: `git push --repo` redirects the push; name the remote `origin` instead.');
-        } else if (a === '--force' || a.startsWith('--force-with-lease') || a === '--force-if-includes') {
-            return block('Blocked: force push.');
-        } else if (a === '--mirror') {
-            return block('Blocked: `git push --mirror` overwrites the remote.');
+        if (['-o', '--push-option', '--receive-pack', '--exec'].includes(a)) {
+            i++;
+            continue;
+        }
+        if (a.startsWith('--') && a.length > 2) {
+            const name = a.split('=')[0];
+            const hit = name.length >= 3 ? PUSH_DANGER.find(([full]) => full.startsWith(name)) : undefined;
+            if (hit) return block(`Blocked: \`git push ${a}\`: ${hit[1]}.`);
         } else if (/^-[a-zA-Z]*f[a-zA-Z]*$/.test(a)) {
             return block('Blocked: force push (-f).');
+        } else if (/^-[a-zA-Z]*d[a-zA-Z]*$/.test(a)) {
+            return block('Blocked: `git push -d` deletes remote refs.');
         } else if (!a.startsWith('-')) positionals.push(a);
     }
     const [remote, ...refspecs] = positionals;
@@ -812,6 +824,9 @@ function checkGitPush(rest) {
     }
     if (refspecs.some((r) => r.startsWith('+'))) {
         return block('Blocked: force push via "+" refspec.');
+    }
+    if (refspecs.some((r) => r.startsWith(':'))) {
+        return block('Blocked: `git push origin :ref` deletes a remote ref.');
     }
     return null;
 }
@@ -1491,8 +1506,14 @@ function checkNetClient(cmd, args) {
     return null;
 }
 
-/** Host paths a throwaway container must not be given. The project and scratch space are fine. */
-function hostMountRefusal(args) {
+/**
+ * Host paths a throwaway container must not be given. Only the project, scratch
+ * space and named volumes are fine. A source the shell would expand (`~`, `$VAR`
+ * other than a bare `$PWD`, globs) or resolve against the working directory
+ * (`$PWD`, `.`, a relative path) is judged by where that directory really is:
+ * `cd /etc && podman run -v "$PWD":/etc ...` mounts the host's /etc.
+ */
+function hostMountRefusal(args, state) {
     const sources = [];
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
@@ -1507,9 +1528,22 @@ function hostMountRefusal(args) {
     }
     const root = projectRoot();
     return sources.find((src) => {
-        if (!src.startsWith('/')) return false; // a named volume, ".", or a relative/$PWD path in the project
-        const real = realAbsolute(src);
-        return real === null || !(insideOrEqual(real, root) || inScratch(real));
+        if (/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(src) && !src.startsWith('.')) return false; // a named volume
+        if (src.startsWith('/')) {
+            const real = realAbsolute(src);
+            return real === null || !(insideOrEqual(real, root) || inScratch(real));
+        }
+        // Relative to the shell's directory: `$PWD`, `${PWD}`, `.`, `./x`, `x/y`.
+        const rel = src.replace(/^\$\{?PWD\}?(?=\/|$)/, '.');
+        if (/[$`~*?[{\\]/.test(rel) || rel.split('/').includes('..') || !cwdInProject(state)) return true;
+        const abs = resolve(cwdOf(state), rel);
+        let real = abs;
+        try {
+            real = realpathSync(abs);
+        } catch {
+            // not on disk: judged by its text
+        }
+        return !(insideOrEqual(abs, root) && insideOrEqual(real, root));
     });
 }
 
@@ -1766,8 +1800,10 @@ function checkSegment(words, state) {
     if (CONTAINER_ENGINES.has(cmd)) {
         // `docker container exec ...` / `podman container run ...` are the long
         // forms of `exec` / `run`; judge them the same way.
-        const positional = args.filter((a) => !a.startsWith('-'));
-        const sub = positional[0] === 'container' ? positional[1] : positional[0];
+        // Global options take values (`docker --host unix:///... exec`), so the
+        // subcommand cannot be located by position: any word that is exactly
+        // exec/attach (or run/create) counts. Fail closed.
+        const sub = ['exec', 'attach', 'run', 'create'].find((word) => args.includes(word));
         // `exec`/`attach` reach long-lived containers, including the distrobox
         // container (distrobox containers are podman containers).
         if (sub === 'exec' || sub === 'attach') {
@@ -1779,7 +1815,7 @@ function checkSegment(words, state) {
             if (args.some((a) => a === '--privileged' || a.startsWith('--privileged='))) {
                 return block(`Blocked: \`${cmd} ${sub} --privileged\` gives the container the host; the e2e harness needs no privileges.`);
             }
-            const mount = hostMountRefusal(args);
+            const mount = hostMountRefusal(args, here);
             if (mount !== undefined) {
                 return block(`Blocked: \`${cmd} ${sub}\` mounts ${mount || '(unparseable)'} from the host; only the project (or temp dirs) may be mounted.`);
             }
