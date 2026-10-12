@@ -88,6 +88,14 @@ class MonitorTests(unittest.TestCase):
         self.tick(200)
         self.assertEqual(self.api.writes, [])
 
+    def test_clock_step_back_clears_api_throttle(self):
+        self.state.update(last_check=5000, next_api_attempt=8600)
+        self.tick(100)
+        self.tick(120)
+        self.tick(140)
+        self.assertEqual(len(self.api.writes), 1)
+        self.assertIs(self.api.value['preferences']['overrideLocalDNS'], False)
+
     def test_api_failure_is_retried_with_backoff(self):
         self.tick(0)
         self.tick(20)

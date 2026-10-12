@@ -117,7 +117,7 @@ with the owner and with the Tailscale admin console.
       not the one it was configured for.
 - [ ] **Retries are rate-limited and streaks reset.** `next_api_attempt` limits
       API calls during a long outage; a reboot, a long gap or a clock jump
-      resets the failure and healthy streaks. Removing either is P1.
+      resets the failure and healthy streaks and the retry throttle. Removing either is P1.
 - [ ] **Credentials.** `configure.py` writes the root-only config
       (`/root/.config/tailscale-dns-failover/config.json`), refuses to
       overwrite it, and never echoes the secret; `monitor.py` never prints it.
