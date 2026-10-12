@@ -145,10 +145,27 @@ gh run view "$RUN" --repo Danathar/dns-failover --log-failed
      It happened once during the 2026-10-12 rollout
      (`toomanyrequests: Data limit exceeded`) and passed on re-run. Treat it
      as a standing availability risk for the required checks, not a one-off.
-     If it recurs, authenticate the pull (an AWS role via OIDC and
-     `aws ecr-public get-login-password`, which raises the rate to 10 a
-     second) or mirror the images to GHCR, in a Tier 1 pull request. Do not
-     switch to Docker Hub, which has the same anonymous-quota problem.
+     If it recurs, change the image source in a Tier 1 pull request. Neither
+     option below has been tried on this repository; verify it on a pull
+     request before relying on it.
+     - **Mirror the images to GHCR (try this first).** Copy the two Debian
+       tags to `ghcr.io` with a separate workflow, and point the job
+       `container:` entries at them. GitHub supports `container.credentials`
+       for a job container (for example the workflow's `GITHUB_TOKEN` with
+       `packages: read`), so the pull is authenticated before the job starts.
+       This moves the dependency to GHCR; it does not remove it.
+     - **Authenticate to ECR Public.** Not a drop-in fix. A job-level
+       `container:` image is pulled during "Initialize containers", before
+       any step runs, so an OIDC login step (`aws ecr-public
+       get-login-password`) inside that job comes too late. It would need
+       static `container.credentials` (a long-lived AWS credential stored as
+       a secret, which this repository otherwise avoids), or the jobs
+       rewritten to start the container from a step after the login. AWS
+       documents a higher rate for authenticated pulls (10 a second), but the
+       quota page does not say whether authentication lifts the 500 GB
+       monthly cap that `Data limit exceeded` points at.
+     - Do not switch to Docker Hub, which has the same anonymous-quota
+       problem.
 3. **Fix forward or revert.** If the cause is clear, fix in a branch and pull
    request as usual. If not, revert the offending merge in a pull request
    (`git revert -m 1 <merge sha>`). Do not push to `main` directly.
