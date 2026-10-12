@@ -1,0 +1,44 @@
+# Tests the repository's agent tooling: the Claude Code Bash guard hook under
+# .claude/hooks/ (it keeps agents from running installers, configure.py,
+# monitor.py, sudo or systemctl on the DNS host, from calling the Tailscale API,
+# and from writing to the wrong GitHub repository) and checks that
+# .claude/settings.json is valid JSON. Only Node is used; there is no npm install.
+name: Agent tooling
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-tooling-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-tooling:
+    name: agent-tooling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Validate .claude/settings.json
+        run: |
+          node -e '
+            const s = JSON.parse(require("node:fs").readFileSync(".claude/settings.json", "utf8"));
+            for (const key of ["allow", "ask", "deny"]) {
+              if (!Array.isArray(s.permissions?.[key])) throw new Error("permissions." + key + " is missing");
+            }
+            if (!s.hooks?.PreToolUse?.some((e) => e.matcher === "Bash")) throw new Error("no PreToolUse hook for Bash");
+          '
+
+      - name: Run hook tests
+        run: node --test '.claude/hooks/tests/*.test.mjs'
