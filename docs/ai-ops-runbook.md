@@ -129,12 +129,26 @@ gh run view "$RUN" --repo Danathar/dns-failover --log-failed
 
 1. **Which job.** `Lint` is ruff or shellcheck; a unit-test job names the test
    that pinned the behaviour (the two Debian jobs run different Python versions,
-   so a failure in one only is usually a version issue); `E2E (debian container)` is the container run of the
-   installers.
+   so a failure in one only is usually a version issue); `E2E (debian container)`
+   runs `dns-upstream-check.py` against real dnsmasq instances inside the job
+   container (it does not run the installers).
 2. **Was it the last commit or the environment.** Re-run once
    (`gh run rerun "$RUN" --repo Danathar/dns-failover --failed`). A pass on
    re-run is a flake; note it in the tracking issue. A new package version in a
    container image is the usual environmental cause.
+   - **Image pull refused.** A job that fails in "Initialize containers" with
+     `toomanyrequests` never ran a test. The Debian 12/13 images come from
+     Amazon ECR Public without authentication. AWS caps unauthenticated use
+     at 500 GB of data a month and one image pull a second per Region, and
+     neither limit can be raised
+     ([ECR Public service quotas](https://docs.aws.amazon.com/AmazonECR/latest/public/public-service-quotas.html)).
+     It happened once during the 2026-10-12 rollout
+     (`toomanyrequests: Data limit exceeded`) and passed on re-run. Treat it
+     as a standing availability risk for the required checks, not a one-off.
+     If it recurs, authenticate the pull (an AWS role via OIDC and
+     `aws ecr-public get-login-password`, which raises the rate to 10 a
+     second) or mirror the images to GHCR, in a Tier 1 pull request. Do not
+     switch to Docker Hub, which has the same anonymous-quota problem.
 3. **Fix forward or revert.** If the cause is clear, fix in a branch and pull
    request as usual. If not, revert the offending merge in a pull request
    (`git revert -m 1 <merge sha>`). Do not push to `main` directly.
@@ -223,11 +237,17 @@ added one, and any Hive tokens. `ci.yml` needs no secret.
    - **Workflow credential** (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`):
      `gh secret set <NAME> --repo Danathar/dns-failover`.
    - **Tailscale OAuth secret:** revoke the client in the Tailscale admin
-     console, create a new one, then on the server stop
-     `tailscale-dns-failover.timer`, remove the root-only
-     `/root/.config/tailscale-dns-failover/config.json` and re-run
-     `configure.py` as the owner (it refuses to overwrite an existing file), or
-     edit the file in place, then re-enable the timer. Never done by an agent.
+     console and create a new one. Then, on the server, as the owner:
+     `sudo systemctl disable --now tailscale-dns-failover.timer`, then
+     `sudo systemctl stop tailscale-dns-failover.service`, then
+     `sudo rm /root/.config/tailscale-dns-failover/config.json`, then from the
+     repository root `sudo python3 ./tailscale-dns-failover/configure.py`
+     (as in README.md; it refuses to overwrite an existing file). Or edit the
+     file in place with `sudoedit /root/.config/tailscale-dns-failover/config.json`.
+     Validate with `sudo /usr/local/sbin/tailscale-dns-failover --dry-run`,
+     then `sudo systemctl enable --now tailscale-dns-failover.timer`. Never
+     done by an agent: these steps use live credentials and the live
+     Tailscale API.
    - **Hive token:** rotate it in Hive or the GitHub App settings.
 5. Record it in the day's ledger without the value.
 

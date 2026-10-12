@@ -124,8 +124,14 @@ reading and settled by the owner.
    - **`AGENTS.md`, `CLAUDE.md` and `.github/workflows/**`** change only in a
      pull request that exists to change them; they steer every other agent and
      every merge.
-5. **Rebase, do not merge `main` into your branch.** If `main` moved, rebase and
-   re-run the checks that matter for your change.
+5. **Bring your branch up to date before it merges.** The ruleset requires a
+   pull request to contain `main`'s current head. Either way satisfies it:
+   rebase your own branch onto `origin/main` while you are still working on it
+   (a clean history, re-run the checks that matter for your change), or use
+   `gh pr update-branch <N> --repo Danathar/dns-failover`. That adds a merge
+   commit; it is what the integrator used at merge time in the ACMM rollout,
+   because it does not rewrite commits a reviewer has already seen.
+   Never force-push a branch someone else is reviewing or updating.
 
 ## Who decides what lands
 
@@ -152,7 +158,7 @@ No agent merges its own pull request unless the owner has set that up.
   GitHub's native merge queue is not available to a personal-account repository,
   which is why the lane lives in Hive rather than in a workflow here.
 - **Green is only trusted on a current branch.** A pull request that passed
-  before `main` moved has not been tested against today's `main`. Rebase first.
+  before `main` moved has not been tested against today's `main`. Update it first.
 - **A merge reaches a live DNS server.** The README tells the owner to run the
   installers from a clone as root, and the timers run the scripts every few
   seconds unattended. Whatever is on `main` is what the next install deploys, so
