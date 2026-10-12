@@ -1,0 +1,80 @@
+# Path to label map for actions/labeler v5 (.github/workflows/labeler.yml).
+# Labels missing from the repository are created by the first step of
+# labeler.yml before it applies them (colour 1d76db); create them by hand first
+# to choose another colour.
+
+'area/local-dns':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'dns-upstream-check.py'
+          - 'dns-upstream-probe.py'
+          - 'dns-upstream-check.service'
+          - 'dns-upstream-check.timer'
+          - 'dnsmasq*.conf*'
+          - 'stubby-*'
+
+'area/tailscale':
+  - changed-files:
+      - any-glob-to-any-file: 'tailscale-dns-failover/**'
+
+'area/installer':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'install-dns-failover.sh'
+          - 'tailscale-dns-failover/install.sh'
+          - 'tailscale-dns-failover/configure.py'
+
+'area/systemd':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.service'
+          - '**/*.timer'
+
+'area/tests':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**'
+          - 'scripts/tests/**'
+          - '.claude/hooks/tests/**'
+          - 'tailscale-dns-failover/test_*.py'
+
+'area/ci':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/auto-qa-tuning.json'
+          - '.github/labeler.yml'
+          - 'scripts/**'
+          - 'pyproject.toml'
+          - '.shellcheckrc'
+          - '.editorconfig'
+          - 'risk-config.json'
+
+'area/docs':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - '*.md'
+          - 'tailscale-dns-failover/README.md'
+
+'area/agents':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.claude/**'
+          - '.cursor/**'
+          - 'AGENTS.md'
+          - 'CLAUDE.md'
+          - '.github/copilot-instructions.md'
+          - '.github/prompts/**'
+
+'area/governance':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'policies/**'
+          - '.github/CODEOWNERS'
+          - '.github/rulesets/**'
+          - 'risk-config.json'
+          - 'docs/risk-tiers.md'
+          - 'docs/agent-boundaries.md'
+          - 'docs/security/**'
+          - 'LICENSE'

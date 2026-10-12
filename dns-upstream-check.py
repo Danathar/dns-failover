@@ -4,10 +4,10 @@ import argparse
 import concurrent.futures
 import json
 import os
-from pathlib import Path
 import re
 import signal
 import subprocess
+from pathlib import Path
 
 
 def healthy(port):

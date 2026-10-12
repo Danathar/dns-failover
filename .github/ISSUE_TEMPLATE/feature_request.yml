@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a change to the failover behaviour or tooling
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What is not possible or inconvenient today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: Include any new options, thresholds, units or config fields involved. Use documentation placeholders, not real profile IDs or addresses.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Local failover (dns-upstream-check.py, dnsmasq, Stubby)
+        - Tailscale monitor
+        - Installers
+        - systemd units
+        - Docs
+        - Tests / CI
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: I understand that changing a fail-safe behaviour or threshold (keep selection when both upstreams fail, restore on failed install, 3-failure threshold, `auto_restore` default false) needs explicit owner approval and a README update
+          required: true
