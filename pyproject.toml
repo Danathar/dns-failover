@@ -33,6 +33,6 @@ include = [
 branch = false
 
 [tool.coverage.report]
-fail_under = 74
+fail_under = 92
 show_missing = true
 skip_empty = true
