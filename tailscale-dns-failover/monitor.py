@@ -210,11 +210,13 @@ def update(client, current, enabled):
 
 
 def tick(config, state, primary_ok, backup_ok, now, client, persist):
-    # Reset health streaks after a reboot, long interruption, or clock jump.
+    # Reset health streaks and the API retry throttle after a reboot, long
+    # interruption, or clock jump (a stale future throttle would block failover).
     elapsed = now - state.get('last_check', now)
     if elapsed < 0 or elapsed > 90:
         state['failures'] = 0
         state.pop('healthy_since', None)
+        state.pop('next_api_attempt', None)
     state['last_check'] = now
     if primary_ok:
         state['failures'] = 0
