@@ -51,17 +51,13 @@ Entry format:
 
 ---
 
-## Current state (as of 2026-10-11)
+## Current state (as of 2026-10-12)
 
-The repository is a single initial commit, `1c5cf8d` ("Initial import of
-dnsmasq/Stubby/Tailscale DNS failover"). The ACMM rollout (file-existence gap
-issues #1-#41 and #43-#50) is in flight as seven parallel slice pull requests,
-one per area; none is merged at the time of writing, so most files named in
-this tooling (AGENTS.md, `docs/`, `policies/`, workflows from other slices) do
-not exist on `main` yet. Re-verify with `git log origin/main` and
-`gh pr list --repo Danathar/dns-failover`. Hive is paused on this repository
-until the work lands and the ACMM evaluation is re-run. Issue #42 (merge queue /
-ruleset) is handled separately by the integrator, not by a slice.
+The ACMM rollout has landed. Issues #1-#41 and #43-#50 were closed by slice
+pull requests #51-#57; #42 is closed by the ruleset pull request that also
+rewrote this file. The ledger with every PR, merge commit and outcome is
+[docs/agent-tasks/2026-10-11.md](../docs/agent-tasks/2026-10-11.md). Hive is
+still paused on this repository until the owner re-runs the ACMM evaluation.
 
 - **What the repo is:** Python 3 (standard library only) and POSIX sh for an
   existing Debian-style DNS server: `dns-upstream-check.py` (primary/backup
@@ -69,41 +65,44 @@ ruleset) is handled separately by the integrator, not by a slice.
   diagnosis), `tailscale-dns-failover/monitor.py` (tailnet DNS override, every
   ~20 s), two installers, `configure.py`, systemd units, dnsmasq/stubby
   configs and examples. GPL-3.0-or-later.
-- **Agent tooling (this slice):** `.claude/hooks/guard-bash.mjs` with tests in
-  `.claude/hooks/tests/` (hook cases, the shared gate-refusal corpus in
-  `tests/fixtures/gate-refusal-corpus.json`, and `settings.json` structure),
-  `.claude/settings.json`, `.claude/memory/`, this file, `docs/reflections/` and
-  the `Agent tooling` workflow (job `agent-tooling`).
+- **Protection:** ruleset `24900573` (`protect main`, file
+  `.github/rulesets/main.json`, explained in
+  [docs/branch-protection.md](../docs/branch-protection.md)) is active. It
+  requires a PR, has no bypass, and requires seven checks on an up-to-date
+  branch: `Lint`, `Unit tests (debian 12)`, `Unit tests (debian 13)`,
+  `E2E (debian container)`, `Coverage gate`, `policy-check`, `agent-tooling`.
+  Hive's merge strategy for this repository is `hive-serialized`.
 - **Checks:** `python3 -m pytest`, `ruff check .`, `shellcheck` over
   `git ls-files '*.sh'`, `tests/e2e/run.sh`, `node --test '.claude/hooks/tests/*.test.mjs'`,
   `node --test 'scripts/tests/*.test.mjs'`, `node scripts/check-policies.mjs`.
-  Most are added by sibling slices.
+  `node --test <directory>/` does not work on Node 22/24; use the quoted globs.
+- **Scheduled workflows:** `nightly-compliance.yml`, `agent-audit.yml`,
+  `auto-qa.yml` and `pr-metrics.yml` were each dispatched once on main on
+  2026-10-12. Audit, auto-QA and metrics passed. Nightly failed on the runner's
+  unpinned shellcheck (#58), which #59 fixes.
 
-## Last session: 2026-10-11 - agent tooling slice of the ACMM rollout
+## Last session: 2026-10-12 - ACMM rollout integration
 
-**Done:** the hook, its tests, settings, memory, this summary, the first
-reflection and the workflow, in the agent-tooling pull request (the PR that
-adds this file). The hook was ported from the reference rollout on
-`Danathar/openaudible-autoupdate` with its follow-up fixes, and the host rule
-was rewritten for this project.
-**In flight:** the six sibling slice PRs (directions, tests/CI, metrics,
-governance, automation, operations docs). Hive stays paused until they land.
-**Blocked on:** review and merge by the owner; the `Agent tooling` required
-check only exists once this PR is on `main`.
-**Watch:** the hook reads its `python3 -m pytest` allowlist from the pytest
-options known at writing time; a new pytest option in a test command needs a
-row in `PYTEST_OPTIONS` in `guard-bash.mjs` (it fails closed, so it shows up
-as a refusal, not a hole). `KNOWN_GAPS` in
-`.claude/hooks/tests/gate-refusal-corpus.test.mjs` lists corpus rows the gate
-still lets through; they are inherited from the reference, not new.
+**Done:** merged #55 (tests/CI), #52, #54, #53, #56, #51 and #57, each after
+updating it with main, green checks and fixing or resolving its Codex P0/P1
+threads. Applied ruleset `24900573`. Created the `ai-fix-requested` label.
+**In flight:** #59 (nightly shellcheck pin) and the ruleset/handoff PR, if
+either is still open.
+**Blocked on:** the owner re-running the ACMM evaluation and unpausing Hive.
+**Watch:** #57 was merged before its Hive `sentinel-alert` was seen. The alert
+was reviewed after the merge as a false positive (test strings only), and the
+label was removed with a comment on #57. Before merging, check for
+`sentinel-alert` as well as CI and review threads. The hook's `KNOWN_GAPS`
+(`.claude/hooks/tests/gate-refusal-corpus.test.mjs`) are inherited from the
+reference and still pass through. A new pytest option needs a `PYTEST_OPTIONS`
+row in `guard-bash.mjs`; until then it fails closed.
 
 ## Open threads
 
-- ACMM slice PRs awaiting review (see `gh pr list --repo Danathar/dns-failover`).
-- Issue #42 (merge queue / ruleset) with the integrator.
+- #58 Nightly compliance failing: close after #59 merges and a re-dispatched
+  nightly run is green.
 
 ## Next steps
 
-1. Land the slice PRs, then re-run the ACMM evaluation.
-2. Resume Hive on this repository.
-3. Rewrite this file from `origin/main` once the work has landed.
+1. Re-run the ACMM evaluation for `dns-failover` (owner, Hive dashboard).
+2. Unpause Hive on this repository.

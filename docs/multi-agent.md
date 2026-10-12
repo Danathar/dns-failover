@@ -135,11 +135,14 @@ No agent merges its own pull request unless the owner has set that up.
   branches required to be up to date: `Lint`, `Unit tests (debian 12)`,
   `Unit tests (debian 13)` and `E2E (debian container)` (the jobs in
   [`ci.yml`](../.github/workflows/ci.yml)), `Coverage gate`
-  ([`coverage-gate.yml`](../.github/workflows/coverage-gate.yml)) and
-  `policy-check` ([`policy-check.yml`](../.github/workflows/policy-check.yml)).
+  ([`coverage-gate.yml`](../.github/workflows/coverage-gate.yml)),
+  `policy-check` ([`policy-check.yml`](../.github/workflows/policy-check.yml))
+  and `agent-tooling` ([`agent-tooling.yml`](../.github/workflows/agent-tooling.yml)).
   All run on every pull request; a red one blocks the merge. The ruleset is
-  recorded under `.github/rulesets/`; if the live ruleset disagrees with this
-  paragraph, the live ruleset wins. Check what is live with
+  recorded in [`.github/rulesets/main.json`](../.github/rulesets/main.json) and
+  explained in [branch-protection.md](branch-protection.md); if the live
+  ruleset disagrees with this paragraph, the live ruleset wins. Check what is
+  live with
   `gh api repos/Danathar/dns-failover/rulesets --jq '.[] | [.name, .enforcement] | @tsv'`.
 - **Serialized merging (issue #42).** Hive merges this repository through its
   serialized lane (`merge_strategy: hive-serialized`): one pull request at a
