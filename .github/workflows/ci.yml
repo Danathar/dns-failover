@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Ruff (pinned)
         # Configuration lives in pyproject.toml. Pinned so results match local runs.
@@ -72,7 +72,7 @@ jobs:
           apt-get install -y -qq --no-install-recommends python3 python3-pytest
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Run unit tests
         run: |
@@ -89,7 +89,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Run end-to-end test
         # Starts real dnsmasq processes and the real dns-upstream-check.py

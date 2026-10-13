@@ -33,7 +33,7 @@ jobs:
           apt-get install -y -qq --no-install-recommends python3 python3-pytest python3-coverage
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Measure coverage
         run: python3 -m coverage run -m pytest
