@@ -42,6 +42,7 @@ function run(command, toolName = 'Bash', extra = {}) {
 }
 
 const allowed = [
+    "cat <<\\EOF\n$(sudo ls)\nEOF",
     // --- node --test and read-only git: the forms .claude/settings.json pre-approves ---
     "node --test 'scripts/tests/*.test.mjs'",
     "node --test '.claude/hooks/tests/*.test.mjs'",
@@ -498,6 +499,15 @@ const hostBlocked = [
     ["cat <<'EOF' | bash\nsudo ls\nEOF", 'privilege'],
     ['echo "sudo ls" | bash', 'privilege'],
     ['distrobox-host-exec sudo ls', 'privilege'],
+    // a backslash-quoted heredoc delimiter ends the body like a quoted one
+    ['cat <<\\EOF\nx\nEOF\nsudo ls', 'privilege'],
+    ['cat <<E\\OF\nx\nEOF\nsudo ls', 'privilege'],
+    ['cat <<-\\EOF\n\tx\n\tEOF\nsudo ls', 'privilege'],
+    ['cat <<\\EOF\nx\nEOF\n./install-dns-failover.sh', 'would execute'],
+    // with no command, distrobox-host-exec runs the host shell on its stdin
+    ['distrobox-host-exec', 'no command'],
+    ["echo 'sudo ls' | distrobox-host-exec", 'no command'],
+    ['distrobox-host-exec <<EOF\nsudo ls\nEOF', 'no command'],
     ['gh pr create --repo Danathar/dns-failover --base main --head b --body "$(cat <<\'EOF\'\nok\nEOF\n)" && sudo true', 'privilege'],
     // --- installers, configure.py, monitor.py (any arguments) ---
     ['./install-dns-failover.sh', 'would execute'],
