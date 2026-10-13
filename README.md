@@ -1,5 +1,14 @@
 # DNS failover for dnsmasq, Stubby, and Tailscale
 
+[![CI](https://github.com/Danathar/dns-failover/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Danathar/dns-failover/actions/workflows/ci.yml)
+[![Coverage gate](https://github.com/Danathar/dns-failover/actions/workflows/coverage-gate.yml/badge.svg?branch=main)](https://github.com/Danathar/dns-failover/actions/workflows/coverage-gate.yml)
+[![Nightly compliance](https://github.com/Danathar/dns-failover/actions/workflows/nightly-compliance.yml/badge.svg?branch=main)](https://github.com/Danathar/dns-failover/actions/workflows/nightly-compliance.yml)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-1f6feb)](https://deepwiki.com/Danathar/dns-failover)
+[![Maintenance assisted by Hivecommons Hive](https://img.shields.io/badge/maintenance%20assisted%20by-Hivecommons%20Hive-1f6feb)](https://github.com/hivecommons/hive)
+[![ACMM L6 Fully Autonomous](https://img.shields.io/badge/ACMM-L6%20Fully%20Autonomous-2da44e)](#maintained-with-hive-acmm-l6)
+[![AI assisted](https://img.shields.io/badge/AI-assisted-d29922)](#about-this-project)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+
 Keep a Linux DNS server answering during a ControlD outage, and let Tailscale
 clients return to local DNS when their ControlD resolver fails.
 
@@ -246,6 +255,21 @@ URLs, live OAuth credentials, operational state, backups, and the host admin log
 are not included. Public provider addresses, loopback addresses, official API
 URLs, and documentation-only examples remain because they explain the software.
 Keep site-specific files and secrets outside version control when adapting this project.
+
+## Maintained with Hive (ACMM L6)
+
+Maintenance is assisted by [Hivecommons Hive](https://github.com/hivecommons/hive), which runs a fleet of AI agents against this repo at ACMM level 6 (Fully Autonomous). The repository is maintained by [@Danathar](https://github.com/Danathar).
+
+**What L6 permits here:** agents file issues and open pull requests, and agent pull requests merge once their required checks pass unless they carry `hold`. Tier 1 and Tier 2 changes (the failover scripts, units, workflows and policies) need the owner to read and merge them; docs and tests need only passing CI. The reviewer agent comments with file and line references but never approves, merges or closes anything.
+
+See [`docs/branch-protection.md`](docs/branch-protection.md) for the required checks, [`docs/risk-tiers.md`](docs/risk-tiers.md) for which changes need a human, [`docs/multi-agent.md`](docs/multi-agent.md) for how agents share the repo and [`docs/agent-boundaries.md`](docs/agent-boundaries.md) for what an agent may change without the owner.
+
+Learn more: [Hive](https://github.com/hivecommons/hive) · [Hive Hub](https://hive.kubestellar.io) · [ACMM levels](https://github.com/hivecommons/hive#acmm-levels) · [full ACMM policy matrix](https://github.com/hivecommons/hive/blob/v4/src/docs/acmm-policy-matrix.md)
+
+## About this project
+
+> [!NOTE]
+> This project was developed with AI assistance and should be treated cautiously. It is not affiliated with or endorsed by ControlD, Tailscale, dnsmasq or Stubby. It comes as-is. It changes a running DNS server's resolver configuration and, if the Tailscale part is enabled, the tailnet's DNS override setting through the Tailscale API. Read the scripts and units before you install them, test on a non-critical server first, and keep a copy of your existing dnsmasq and Stubby configuration.
 
 ## License
 
