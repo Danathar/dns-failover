@@ -150,7 +150,7 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: steps.target.outputs.proceed == 'true' && steps.auth.outputs.configured == 'true'
         with:
           ref: ${{ steps.target.outputs.ref }}

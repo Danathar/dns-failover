@@ -40,7 +40,7 @@ jobs:
           apt-get install -y -qq --no-install-recommends python3 python3-pytest python3-coverage python3-tomli nodejs ca-certificates git
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Measure coverage
         # Same measurement as .github/workflows/coverage-gate.yml. The floor is
