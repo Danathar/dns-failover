@@ -127,6 +127,8 @@ const allowed = [
     'timeout 120 shellcheck monitor.py',
     'env SHELLCHECK_OPTS=-x shellcheck monitor.py',
     'timeout 30 cat monitor.py',
+    // a wrapper with no program runs nothing
+    'timeout 5',
     'command -v monitor.py',
     'nice -n 5 shellcheck monitor.py',
     'cat monitor.py | wc -l',
@@ -397,6 +399,8 @@ const hostAllowed = [
     'cd tests && python3 -m pytest unit',
     'python3 -m coverage run -m pytest',
     'python3 -m coverage run --branch -m pytest -q',
+    // --source takes a value; it is not the program
+    'python3 -m coverage run --source tailscale-dns-failover -m pytest',
     'python3 -m coverage report',
     'python3 -m coverage report --fail-under=80 --show-missing',
     'python3 -m coverage run -m pytest && python3 -m coverage report',
@@ -426,6 +430,8 @@ const hostAllowed = [
     'systemctl cat dns-upstream-check.timer',
     'systemctl --user daemon-reload',
     'systemctl --user start some-other.service',
+    // no subcommand: lists units
+    'systemctl',
     'systemd-analyze verify dns-upstream-check.service',
     'service --status-all',
     'dnsmasq --test',
@@ -438,6 +444,8 @@ const hostAllowed = [
     'dig @127.0.0.1 -p 5453 example.com',
     'tailscale status',
     'tailscale ip -4',
+    // no subcommand: prints usage
+    'tailscale',
     'curl -fsS https://example.com/',
     'wget -qO- https://example.org/ping',
     // The e2e harness: a throwaway container that mounts only the project
@@ -460,6 +468,9 @@ const hostAllowed = [
     'git push --set-upstream origin acmm/x',
     'git push --dry-run origin main',
     'git push --no-verify origin acmm/x',
+    // a push option's value is not the remote or a refspec
+    'git push -o ci.skip origin acmm/x',
+    'git push --push-option ci.skip origin acmm/x',
     'git branch',
     'git branch --list "acmm/*"',
 ];
@@ -672,6 +683,8 @@ const hostBlocked = [
     ['cd $X && pytest', 'working directory'],
     ['cd tests && cd ../.. && pytest', 'working directory'],
     ['cd /tmp; python3 -m pytest tests/unit', 'working directory'],
+    // popd returns to a directory the hook cannot see
+    ['cd tests && popd && python3 -m pytest', 'working directory'],
     ['env -C /tmp python3 -m pytest', 'working directory'],
     ['env --chdir=/tmp pytest', 'working directory'],
     ['systemd-run --working-directory=/tmp python3 -m pytest', 'working directory'],
@@ -807,6 +820,8 @@ const hostBlocked = [
     ['podman run -v ../x:/x debian:12 true', 'mounts'],
     ['podman run -v "$PWD/..":/x debian:12 true', 'mounts'],
     ['cd /tmp && podman run -v .:/x debian:12 true', 'mounts'],
+    // a relative source inside the project that is a symlink out of it
+    ['podman run -v tests/etclink:/x debian:12 true', 'mounts'],
     ['podman run --mount type=bind,source=$HOME,target=/h debian:12 true', 'mounts'],
     // global options with values must not hide the subcommand
     ['docker --host unix:///var/run/docker.sock exec dev ls', 'exec'],
