@@ -83,7 +83,7 @@ jobs:
     name: E2E (debian container)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    container: public.ecr.aws/docker/library/debian:12
+    container: public.ecr.aws/docker/library/debian:13
     defaults:
       run:
         shell: bash

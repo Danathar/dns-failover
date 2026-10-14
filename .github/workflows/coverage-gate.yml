@@ -21,7 +21,7 @@ jobs:
     name: Coverage gate
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    container: public.ecr.aws/docker/library/debian:12
+    container: public.ecr.aws/docker/library/debian:13
     defaults:
       run:
         # Container jobs default to sh (dash on Debian); pipefail needs bash.
