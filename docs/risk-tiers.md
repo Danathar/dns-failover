@@ -24,7 +24,7 @@ repository root), `*` matches within one directory level.
 
 | Tier | Name | Covers | Required commands | Review |
 | ---- | ---- | ------ | ----------------- | ------ |
-| 1 | critical | `.github/workflows/**`, `.github/CODEOWNERS`, `.github/rulesets/**`, `.claude/settings.json`, `.claude/hooks/**`, `policies/**`, `scripts/check-policies.mjs`, `risk-config.json`, `LICENSE`, `AGENTS.md`, `install-dns-failover.sh`, `tailscale-dns-failover/install.sh`, `tailscale-dns-failover/configure.py`, `tailscale-dns-failover/monitor.py`, `dns-upstream-check.py` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `tests/e2e/run.sh`, `python3 -m coverage run -m pytest && python3 -m coverage report`, `node scripts/check-policies.mjs`, `node --test 'scripts/tests/*.test.mjs'`, `node --test '.claude/hooks/tests/*.test.mjs'` | `owner` |
+| 1 | critical | `.github/workflows/**`, `.github/CODEOWNERS`, `.github/rulesets/**`, `.claude/settings.json`, `.claude/hooks/**`, `policies/**`, `scripts/check-policies.mjs`, `risk-config.json`, `renovate.json`, `LICENSE`, `AGENTS.md`, `install-dns-failover.sh`, `tailscale-dns-failover/install.sh`, `tailscale-dns-failover/configure.py`, `tailscale-dns-failover/monitor.py`, `dns-upstream-check.py` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `tests/e2e/run.sh`, `python3 -m coverage run -m pytest && python3 -m coverage report`, `node scripts/check-policies.mjs`, `node --test 'scripts/tests/*.test.mjs'`, `node --test '.claude/hooks/tests/*.test.mjs'` | `owner` |
 | 2 | high | `dns-upstream-probe.py`, `**/*.service`, `**/*.timer`, `**/dnsmasq-*.conf`, `**/*.conf.example`, `**/stubby-*.yml`, `**/stubby-*.yml.example`, `pyproject.toml`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursor/rules/**`, `.github/prompts/**`, `.claude/skills/**`, `.claude/memory/**`, `docs/risk-tiers.md`, `docs/agent-boundaries.md`, `docs/security/**` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `node scripts/check-policies.mjs` | `owner` |
 | 3 | standard | `tests/**`, `scripts/**`, `docs/**`, `*.md`, `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md`, `.github/labeler.yml`, `.github/auto-qa-tuning.json`, `.editorconfig`, `.shellcheckrc`, `.gitignore` | `python3 -m pytest`, `ruff check .`, `node --test 'scripts/tests/*.test.mjs'` | `ci` |
 
@@ -113,6 +113,11 @@ tier".
 - **`policies/**`, `scripts/check-policies.mjs`, `risk-config.json`, `AGENTS.md`.**
   The rules that bound agents and the checker that enforces them. They are
   changed by the owner, never by the agent they constrain.
+- **`renovate.json`.** Decides which dependency updates Renovate proposes and
+  which of them wait for the owner. Its rule for `.github/workflows/**` keeps
+  Tier 1 workflow updates behind owner approval on the Dependency Dashboard,
+  because the merge lane merges any green PR. Loosening it lets workflow
+  changes reach `main` unreviewed.
 - **`LICENSE`.** GPL-3.0-or-later text; changing it changes what users may do
   with the code.
 - **The root-run scripts** (`install-dns-failover.sh`,

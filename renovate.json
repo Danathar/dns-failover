@@ -2,5 +2,14 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "Workflow files are Tier 1 (docs/agent-boundaries.md): the owner approves each update on the Dependency Dashboard before Renovate opens a PR, because the Hive merge lane merges any green PR and does not read Renovate's automerge setting.",
+      "matchFileNames": [
+        ".github/workflows/**"
+      ],
+      "dependencyDashboardApproval": true
+    }
   ]
 }

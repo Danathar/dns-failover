@@ -12,6 +12,7 @@
 /policies/                                      @Danathar
 /scripts/check-policies.mjs                     @Danathar
 /risk-config.json                               @Danathar
+/renovate.json                                  @Danathar
 /LICENSE                                        @Danathar
 /AGENTS.md                                      @Danathar
 /install-dns-failover.sh                        @Danathar
