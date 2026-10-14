@@ -118,6 +118,7 @@ test('real repository trees: classify picks the most dangerous tier', () => {
     assert.equal(classify(config, '.claude/hooks/guard-bash.mjs').tier, 1);
     assert.equal(classify(config, 'LICENSE').tier, 1);
     assert.equal(classify(config, 'AGENTS.md').tier, 1);
+    assert.equal(classify(config, 'renovate.json').tier, 1);
     assert.equal(classify(config, 'install-dns-failover.sh').tier, 1);
     assert.equal(classify(config, 'tailscale-dns-failover/monitor.py').tier, 1);
     assert.equal(classify(config, 'dns-upstream-check.py').tier, 1);
