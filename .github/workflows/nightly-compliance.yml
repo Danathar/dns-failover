@@ -19,7 +19,7 @@ name: Nightly compliance
 # workflow.
 #
 # The jobs repeat the commands of ci.yml and policy-check.yml rather than
-# calling them. Container images come from public.ecr.aws, never Docker Hub.
+# calling them. Container images come from mirror.gcr.io, never Docker Hub directly.
 
 on:
   schedule:
@@ -38,7 +38,7 @@ jobs:
     name: Unit tests (debian ${{ matrix.debian }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    container: public.ecr.aws/docker/library/debian:${{ matrix.debian }}
+    container: mirror.gcr.io/library/debian:${{ matrix.debian }}
     strategy:
       fail-fast: false
       matrix:

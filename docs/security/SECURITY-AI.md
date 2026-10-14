@@ -179,7 +179,7 @@ Enforced by [policies/workflow-permissions.json](../../policies/workflow-permiss
   code a fork author controls.
 - Actions outside `actions/` and `github/` are pinned to a full commit SHA,
   with the tag in a `# vX` comment. CI containers come from
-  `public.ecr.aws`, not Docker Hub.
+  `mirror.gcr.io`, not Docker Hub directly.
 - Event-controlled strings (issue titles, branch names, PR bodies, inputs)
   reach shell steps through `env:`, not by expression interpolation in `run:`.
 - `GITHUB_TOKEN` is scoped to this repository. Workflows that call `gh` set

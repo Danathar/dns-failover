@@ -452,12 +452,12 @@ const hostAllowed = [
     // The e2e harness: a throwaway container that mounts only the project
     'tests/e2e/run.sh',
     'bash tests/e2e/run.sh',
-    'podman run --rm -v "$PWD":/src:ro,Z public.ecr.aws/docker/library/debian:13 /src/tests/e2e/in-container.sh',
+    'podman run --rm -v "$PWD":/src:ro,Z mirror.gcr.io/library/debian:13 /src/tests/e2e/in-container.sh',
     `podman run --rm -v ${PROJECT}:/src:ro,Z debian:12 sh /src/tests/e2e/in-container.sh`,
     `docker run --rm --mount type=bind,source=${PROJECT},target=/src debian:12 sh /src/tests/e2e/in-container.sh`,
     'podman run --rm debian:12 true',
     // tests/e2e/run.sh's own command line
-    'podman run --rm -v "$PWD:/src:ro,Z" -e SRC=/src public.ecr.aws/docker/library/debian:12 bash /src/tests/e2e/in-container.sh',
+    'podman run --rm -v "$PWD:/src:ro,Z" -e SRC=/src mirror.gcr.io/library/debian:12 bash /src/tests/e2e/in-container.sh',
     'docker run --rm -it -w /src --name e2e -e SRC=/src -v "$PWD":/src:ro,Z debian:12 true',
     "git ls-files '*.sh' | xargs grep -n set",
     'ls tests | xargs -n1 wc -l',

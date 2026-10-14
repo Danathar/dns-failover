@@ -3,7 +3,8 @@ name: CI
 # Runs on every pull request and every push to main (no path filters, so the
 # required checks always report). Job display names below are what branch
 # protection / the ruleset refer to; do not rename them.
-# Containers come from public.ecr.aws, never Docker Hub (anonymous pull limits).
+# Containers come from mirror.gcr.io (Google's mirror of Docker Hub official
+# images), never Docker Hub directly (anonymous pull limits).
 
 on:
   pull_request:
@@ -58,9 +59,9 @@ jobs:
       matrix:
         include:
           - name: debian 12
-            image: public.ecr.aws/docker/library/debian:12
+            image: mirror.gcr.io/library/debian:12
           - name: debian 13
-            image: public.ecr.aws/docker/library/debian:13
+            image: mirror.gcr.io/library/debian:13
     container: ${{ matrix.image }}
     defaults:
       run:
@@ -83,7 +84,7 @@ jobs:
     name: E2E (debian container)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    container: public.ecr.aws/docker/library/debian:13
+    container: mirror.gcr.io/library/debian:13
     defaults:
       run:
         shell: bash

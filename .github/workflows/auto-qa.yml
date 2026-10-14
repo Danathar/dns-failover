@@ -30,7 +30,7 @@ jobs:
     name: Measure and propose
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    container: public.ecr.aws/docker/library/debian:13
+    container: mirror.gcr.io/library/debian:13
     outputs:
       raise: ${{ steps.tune.outputs.raise }}
     steps:

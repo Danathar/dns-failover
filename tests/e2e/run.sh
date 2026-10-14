@@ -5,7 +5,7 @@
 set -eu
 
 root=$(CDPATH="" cd -- "$(dirname -- "$0")/../.." && pwd)
-image=${E2E_IMAGE:-public.ecr.aws/docker/library/debian:12}
+image=${E2E_IMAGE:-mirror.gcr.io/library/debian:12}
 
 if command -v podman >/dev/null 2>&1; then
     engine=podman
