@@ -25,8 +25,9 @@ matches applies, raised by the rules in "Raise the tier" in
 
 `.github/CODEOWNERS` lists the Tier 1 and Tier 2 paths with `@Danathar`, and
 nothing else: there is no catch-all `*`. `node scripts/check-policies.mjs`
-fails when a path of a tier that needs owner review is missing there, or when
-a `*` entry is added. The ruleset in `.github/rulesets/main.json` requires code
+fails when a path of a tier that needs owner review is missing there, when
+a `*` entry is added, or when a later entry overrides the owner for such a path
+(GitHub applies the last matching line). The ruleset in `.github/rulesets/main.json` requires code
 owner review, so once it is applied (see
 [branch-protection.md](branch-protection.md)), a pull request touching a Tier 1
 or Tier 2 path cannot merge until the owner approves it on GitHub, whoever or

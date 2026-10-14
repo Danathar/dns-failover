@@ -284,19 +284,45 @@ export function codeownersPattern(glob) {
 }
 
 /**
+ * A CODEOWNERS pattern as an anchored RegExp over posix paths, following
+ * GitHub's gitignore-style rules: a leading or inner `/` anchors the pattern
+ * to the repository root, otherwise it matches at any depth; a trailing `/`
+ * matches only what is under that directory; a pattern that names a directory
+ * without the trailing `/` covers everything under it as well.
+ */
+export function codeownersRegExp(pattern) {
+    let p = pattern;
+    const dirOnly = p.endsWith('/');
+    if (dirOnly) p = p.slice(0, -1);
+    const anchored = p.includes('/');
+    if (p.startsWith('/')) p = p.slice(1);
+    const body = globToRegExp(p).source.slice(1, -1);
+    const prefix = anchored ? '' : '(?:.*/)?';
+    return new RegExp(`^${prefix}${body}${dirOnly ? '/.*' : '(?:/.*)?'}$`);
+}
+
+/**
  * Every path of a tier whose review is `owner` must be listed in CODEOWNERS
  * with the owner, so the required review cannot drift from docs/risk-tiers.md.
  * There must be no `*` entry: the ruleset requires code owner review, so a
  * catch-all would make every pull request, Tier 3 included, wait for the owner.
+ *
+ * GitHub applies the last entry that matches a file, so an entry being present
+ * is not enough: a later line such as `*.py` with no owner would take the
+ * owner's review off every Tier 1 script while every entry above is intact.
+ * Each of `files` that classifies into an owner-review tier must therefore be
+ * owned by `owner` under its last matching entry.
  */
-export function checkCodeowners(config, text, owner) {
+export function checkCodeowners(config, text, owner, files = []) {
     const v = [];
     const entries = new Map();
+    const ordered = [];
     for (const raw of text.split(/\r?\n/)) {
         const line = raw.replace(/\s+#.*$/, '').trim();
         if (!line || line.startsWith('#')) continue;
         const [pat, ...owners] = line.split(/\s+/);
         entries.set(pat, owners);
+        ordered.push({ pat, owners, re: codeownersRegExp(pat) });
     }
     if (entries.has('*')) {
         v.push('.github/CODEOWNERS: no "*" entry; code owner review is required, so it would cover every pull request');
@@ -308,6 +334,17 @@ export function checkCodeowners(config, text, owner) {
             if (!(entries.get(want) ?? []).includes(owner)) {
                 v.push(`.github/CODEOWNERS: tier ${t.tier} path "${g}" needs an entry "${want} ${owner}"`);
             }
+        }
+    }
+    for (const f of files) {
+        const t = classify(config, f);
+        if (t.review !== 'owner') continue;
+        const last = ordered.findLast((e) => e.re.test(f));
+        if (!last) {
+            v.push(`.github/CODEOWNERS: tier ${t.tier} file "${f}" matches no entry, so it needs no review`);
+        } else if (!last.owners.includes(owner)) {
+            const who = last.owners.length ? last.owners.join(' ') : 'no owner';
+            v.push(`.github/CODEOWNERS: tier ${t.tier} file "${f}" ends up with ${who}: GitHub applies its last matching entry, "${last.pat}"`);
         }
     }
     return v;
@@ -674,7 +711,7 @@ export function checkAll(root) {
             violations.push('risk-config.json: "owner" must be a GitHub handle such as "@Danathar"');
         } else {
             violations.push(
-                ...checkCodeowners(config, fs.readFileSync(coPath, 'utf8'), config.owner),
+                ...checkCodeowners(config, fs.readFileSync(coPath, 'utf8'), config.owner, files),
             );
         }
     }
