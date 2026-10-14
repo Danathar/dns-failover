@@ -138,43 +138,14 @@ gh run view "$RUN" --repo Danathar/dns-failover --log-failed
    container image is the usual environmental cause.
    - **Image pull refused.** A job that fails in "Initialize containers" with
      `toomanyrequests` never ran a test. The Debian 12/13 images come from
-     Amazon ECR Public without authentication. Anonymous pulls get 500 GB of
-     free data transfer a month, counted by source IP
-     ([ECR pricing](https://aws.amazon.com/ecr/pricing/)), and one image pull
-     a second per Region, which cannot be raised
-     ([ECR Public service quotas](https://docs.aws.amazon.com/AmazonECR/latest/public/public-service-quotas.html)).
-     GitHub-hosted runners share addresses with other users [INFERENCE], so
-     this repository's own usage does not decide when the cap is hit. It
-     happened once during the 2026-10-12 rollout
-     (`toomanyrequests: Data limit exceeded`) and passed on re-run. Treat it
-     as a standing availability risk for the required checks, not a one-off.
-     If it recurs, change the image source in a Tier 1 pull request. Neither
-     option below has been tried on this repository; verify it on a pull
-     request before relying on it.
-     - **Mirror the images to GHCR (try this first).** Copy the two Debian
-       tags to `ghcr.io` with a separate workflow, and point the job
-       `container:` entries at them. GitHub supports `container.credentials`
-       for a job container (for example the workflow's `GITHUB_TOKEN` with
-       `packages: read`), so the pull is authenticated before the job starts.
-       This moves the dependency to GHCR; it does not remove it.
-     - **Authenticate to ECR Public.** Pulls made with an AWS account get
-       5 TB of free transfer a month instead of 500 GB
-       ([ECR pricing](https://aws.amazon.com/ecr/pricing/)) and 10 pulls a
-       second. It is not a drop-in fix: a job-level `container:` image is
-       pulled during "Initialize containers", before any step runs, so an
-       OIDC login step (`aws ecr-public get-login-password`) in the same job
-       comes too late. Three ways around that:
-       - Static `container.credentials` from repository secrets: a long-lived
-         AWS credential, which this repository otherwise avoids.
-       - A preceding job that logs in with OIDC and hands the registry token
-         to the test jobs through `needs` (`container.credentials` may use
-         the `needs` context). GitHub drops masked values from job outputs,
-         so the token would have to travel unmasked. That conflicts with
-         keeping credentials out of logs and outputs; prefer another route.
-       - Start the container from a step after an in-job OIDC login, instead
-         of using a job-level `container:`.
-     - Do not switch to Docker Hub, which has the same anonymous-quota
-       problem.
+     `mirror.gcr.io`, Google's mirror of the Docker Hub official images, which
+     does not apply the anonymous pull quota that GitHub-hosted runners hit on
+     other registries. The repository used Amazon ECR Public until
+     2026-10-14, when repeated `toomanyrequests: Data limit exceeded` failures
+     (issue #83) led the owner to move to the mirror. If a pull is refused
+     again, re-run once, then open an issue; changing the image source is a
+     Tier 1 pull request. Do not switch to Docker Hub directly, which has its
+     own anonymous-quota problem.
 3. **Fix forward or revert.** If the cause is clear, fix in a branch and pull
    request as usual. If not, revert the offending merge in a pull request
    (`git revert -m 1 <merge sha>`). Do not push to `main` directly.
