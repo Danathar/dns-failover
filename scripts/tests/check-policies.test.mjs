@@ -11,7 +11,9 @@ import {
     checkRiskTiers,
     classify,
     codeownersPattern,
+    codeownersRegExp,
     globToRegExp,
+    walk,
 } from '../check-policies.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -838,6 +840,67 @@ test('codeowners: checkAll reports a drop in a real tree and a bad owner field',
     assert.ok(v.some((x) => /docs\/security\/\*\*/.test(x)), v.join('|'));
     const cfg = { ...JSON.parse(RISK), owner: 'Danathar' };
     assert.ok(run({ 'risk-config.json': JSON.stringify(cfg) }).some((x) => /"owner" must be/.test(x)));
+});
+
+test('codeowners: patterns match the way GitHub applies them', () => {
+    // Leading or inner `/` anchors to the root; otherwise any depth.
+    assert.ok(codeownersRegExp('/LICENSE').test('LICENSE'));
+    assert.ok(!codeownersRegExp('/LICENSE').test('docs/LICENSE'));
+    assert.ok(codeownersRegExp('*.service').test('tailscale-dns-failover/tailscale-dns-failover.service'));
+    assert.ok(codeownersRegExp('*.service').test('a.service'));
+    assert.ok(codeownersRegExp('stubby-*.yml').test('x/stubby-home.yml'));
+    assert.ok(!codeownersRegExp('stubby-*.yml').test('x/stubby-home.yml.example'));
+    assert.ok(codeownersRegExp('.github/prompts/').test('.github/prompts/a/b.md'));
+    assert.ok(!codeownersRegExp('.github/prompts/').test('x/.github/prompts/a.md'));
+    // A trailing `/` covers only what is under the directory.
+    assert.ok(codeownersRegExp('/policies/').test('policies/a.json'));
+    assert.ok(!codeownersRegExp('/policies/').test('policies'));
+    assert.ok(codeownersRegExp('docs/').test('x/docs/a.md'));
+    // A directory named without the trailing `/` covers its contents too.
+    assert.ok(codeownersRegExp('/tailscale-dns-failover').test('tailscale-dns-failover/monitor.py'));
+    // `*` stays inside one path segment.
+    assert.ok(!codeownersRegExp('/docs/*.md').test('docs/security/SECURITY-AI.md'));
+});
+
+test('codeowners: every owner-review file of this repository ends up with the owner', () => {
+    const config = JSON.parse(RISK);
+    assert.deepEqual(checkCodeowners(config, CODEOWNERS, config.owner, walk(repoRoot)), []);
+});
+
+test('codeowners: a later entry that takes a Tier 1 or 2 file off the owner fails', () => {
+    // GitHub applies the last matching entry, so each of these removes the
+    // owner's review from files whose own entries above are still intact.
+    const config = JSON.parse(RISK);
+    const files = walk(repoRoot);
+    const cases = [
+        ['*.py', /tier 1 file "tailscale-dns-failover\/monitor\.py" ends up with no owner: .*"\*\.py"/],
+        ['/tailscale-dns-failover/ @someone-else', /tier 1 file "tailscale-dns-failover\/configure\.py" ends up with @someone-else/],
+        ['/.github/', /tier 1 file "\.github\/workflows\/ci\.yml" ends up with no owner/],
+        ['docs/ @someone-else', /tier 2 file "docs\/risk-tiers\.md" ends up with @someone-else/],
+        ['/scripts/ @someone-else', /tier 1 file "scripts\/check-policies\.mjs"/],
+    ];
+    for (const [line, want] of cases) {
+        const v = checkCodeowners(config, `${CODEOWNERS}${line}\n`, config.owner, files);
+        assert.match(v.join('\n'), want, line);
+    }
+    // The same entry placed before the owner's entries is overridden by them.
+    assert.deepEqual(checkCodeowners(config, `*.py\n${CODEOWNERS}`, config.owner, files), []);
+    // A later entry that keeps the owner, or only covers Tier 3 files, is fine.
+    assert.deepEqual(checkCodeowners(config, `${CODEOWNERS}*.py @someone-else @Danathar\n`, config.owner, files), []);
+    assert.deepEqual(checkCodeowners(config, `${CODEOWNERS}/tests/ @someone-else\n`, config.owner, files), []);
+});
+
+test('codeowners: an owner-review file no entry matches fails', () => {
+    const config = JSON.parse(RISK);
+    const v = checkCodeowners(config, '/LICENSE @Danathar\n', config.owner, ['LICENSE', 'AGENTS.md', 'README.md']);
+    assert.match(v.join('\n'), /tier 1 file "AGENTS\.md" matches no entry/);
+    assert.ok(!v.some((x) => /"README\.md"/.test(x)), v.join('|'));
+    assert.ok(!v.some((x) => /file "LICENSE"/.test(x)), v.join('|'));
+});
+
+test('codeowners: checkAll reports a later entry that overrides the owner', () => {
+    const v = run({ '.github/CODEOWNERS': `${CODEOWNERS}*.py\n` });
+    assert.ok(v.some((x) => /file "tailscale-dns-failover\/configure\.py" ends up with no owner/.test(x)), v.join('|'));
 });
 
 test('risk tiers: a pipe in a command is escaped in the table and compared unescaped', () => {
