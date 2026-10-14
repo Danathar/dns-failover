@@ -25,7 +25,7 @@ repository root), `*` matches within one directory level.
 | Tier | Name | Covers | Required commands | Review |
 | ---- | ---- | ------ | ----------------- | ------ |
 | 1 | critical | `.github/workflows/**`, `.github/CODEOWNERS`, `.github/rulesets/**`, `.claude/settings.json`, `.claude/hooks/**`, `policies/**`, `scripts/check-policies.mjs`, `risk-config.json`, `renovate.json`, `LICENSE`, `AGENTS.md`, `install-dns-failover.sh`, `tailscale-dns-failover/install.sh`, `tailscale-dns-failover/configure.py`, `tailscale-dns-failover/monitor.py`, `dns-upstream-check.py` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `tests/e2e/run.sh`, `python3 -m coverage run -m pytest && python3 -m coverage report`, `node scripts/check-policies.mjs`, `node --test 'scripts/tests/*.test.mjs'`, `node --test '.claude/hooks/tests/*.test.mjs'` | `owner` |
-| 2 | high | `dns-upstream-probe.py`, `**/*.service`, `**/*.timer`, `**/dnsmasq-*.conf`, `**/*.conf.example`, `**/stubby-*.yml`, `**/stubby-*.yml.example`, `pyproject.toml`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursor/rules/**`, `.github/prompts/**`, `.claude/skills/**`, `.claude/memory/**`, `docs/risk-tiers.md`, `docs/agent-boundaries.md`, `docs/security/**` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `node scripts/check-policies.mjs` | `owner` |
+| 2 | high | `dns-upstream-probe.py`, `**/*.service`, `**/*.timer`, `**/dnsmasq-*.conf`, `**/*.conf.example`, `**/stubby-*.yml`, `**/stubby-*.yml.example`, `pyproject.toml`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursor/rules/**`, `.github/prompts/**`, `.claude/skills/**`, `.claude/memory/**`, `.claude/session-summary.md`, `docs/risk-tiers.md`, `docs/agent-boundaries.md`, `docs/security/**` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `node scripts/check-policies.mjs` | `owner` |
 | 3 | standard | `tests/**`, `scripts/**`, `docs/**`, `*.md`, `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md`, `.github/labeler.yml`, `.github/auto-qa-tuning.json`, `.editorconfig`, `.shellcheckrc`, `.gitignore` | `python3 -m pytest`, `ruff check .`, `node --test 'scripts/tests/*.test.mjs'` | `ci` |
 
 Review values: `owner` means the repository owner (Danathar) reads the diff and
@@ -129,8 +129,10 @@ tier".
   mistake changes behaviour without touching Tier 1 code. See "Raise the tier".
 - **Agent direction files** (`CLAUDE.md`, `.github/copilot-instructions.md`,
   `.cursor/rules/**`, `.github/prompts/**`, `.claude/skills/**`,
-  `.claude/memory/**`). They tell agents what to do; a loosened one loosens the
-  agent.
+  `.claude/memory/**`, `.claude/session-summary.md`). They tell agents what to
+  do; a loosened one loosens the agent. The session summary counts because
+  CLAUDE.md and AGENTS.md have every session read it first, and it repeats the
+  host rule.
 - **`docs/security/**`, `docs/agent-boundaries.md`, this file.** The written
   boundary agents are judged by. They are Tier 2 so an agent cannot change
   them under the `ci` gate, even though ordinary `docs/**` is Tier 3. Edit

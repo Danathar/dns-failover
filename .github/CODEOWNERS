@@ -38,6 +38,7 @@ stubby-*.yml.example                            @Danathar
 /.github/prompts/                               @Danathar
 /.claude/skills/                                @Danathar
 /.claude/memory/                                @Danathar
+/.claude/session-summary.md                     @Danathar
 /docs/risk-tiers.md                             @Danathar
 /docs/agent-boundaries.md                       @Danathar
 /docs/security/                                 @Danathar
