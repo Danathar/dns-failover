@@ -29,14 +29,19 @@ direct push from any token with `contents: write`.
 
 Being active does not prove the rules are the ones in the file; an edit in the
 GitHub UI could leave only `deletion`. Compare the live ruleset with the file
-(prints nothing when they match):
+(prints nothing when they match; it needs no admin rights):
 
 ```bash
 diff <(gh api repos/Danathar/dns-failover/rulesets/24900573 \
-         --jq '{name,target,enforcement,conditions,bypass_actors,rules}' | jq -S .) \
-     <(jq -S '{name,target,enforcement,conditions,bypass_actors,rules}' \
+         --jq '{name,target,enforcement,conditions,rules}' | jq -S .) \
+     <(jq -S '{name,target,enforcement,conditions,rules}' \
          .github/rulesets/main.json)
 ```
+
+GitHub returns `bypass_actors` only to a repository admin. Anyone else gets
+`null` there, which would always differ from the file's `[]`, so the command
+above leaves the field out. The owner checks it as well by adding
+`bypass_actors` to both field lists; that diff must also print nothing.
 
 GitHub fills in defaults for `pull_request` parameters that were not sent
 (`require_extra_approval_for_unattributed_changes: true`,
