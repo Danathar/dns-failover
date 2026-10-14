@@ -1,9 +1,11 @@
-# Default owner for everything.
-* @Danathar
+# Only the Tier 1 and Tier 2 paths are listed, and there is no catch-all `*`.
+# The ruleset (.github/rulesets/main.json) requires code owner review, so every
+# path listed here needs the owner's approving review before it can merge, and
+# a `*` line would extend that to every pull request. Tier 3 paths merge on the
+# required checks. scripts/check-policies.mjs fails when an owner-review path is
+# missing here or a `*` line comes back. docs/agent-boundaries.md explains it.
 
 # Tier 1 (critical) paths from docs/risk-tiers.md and risk-config.json.
-# Keep this list in step with that table; scripts/check-policies.mjs fails
-# when an owner-review path is missing here. docs/agent-boundaries.md explains it.
 /.github/workflows/                             @Danathar
 /.github/CODEOWNERS                             @Danathar
 /.github/rulesets/                              @Danathar

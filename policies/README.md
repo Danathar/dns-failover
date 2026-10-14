@@ -106,7 +106,7 @@ Not JSON policy files. The checker compares the tier table in
 paths, required commands or review values differ (a literal `|` in a command is
 written `\|` in the table). It also fails when a path in a tier whose review is
 `owner` has no entry for `owner` in [`.github/CODEOWNERS`](../.github/CODEOWNERS),
-or when `*` does not default to the owner. `**/x` in the config is `x` in
+or when CODEOWNERS has a catch-all `*` entry. `**/x` in the config is `x` in
 CODEOWNERS, `dir/**` is `/dir/`, anything else is `/path`.
 `node scripts/check-policies.mjs --classify <path>...` prints the tier of a
 path. It cannot see inside a file, so it does not apply the "Raise the tier"

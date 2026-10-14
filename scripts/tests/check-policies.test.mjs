@@ -824,13 +824,13 @@ test('codeowners: every owner-review path of this repository is listed', () => {
     assert.deepEqual(checkCodeowners(config, CODEOWNERS, config.owner), []);
 });
 
-test('codeowners: a dropped entry, a wrong owner and a missing default fail', () => {
+test('codeowners: a dropped entry, a wrong owner and a catch-all fail', () => {
     const config = JSON.parse(RISK);
     const without = (line) => CODEOWNERS.split('\n').filter((l) => !l.startsWith(line)).join('\n');
     assert.match(checkCodeowners(config, without('/policies/'), '@Danathar').join('\n'), /"policies\/\*\*" needs an entry "\/policies\/ @Danathar"/);
     assert.match(checkCodeowners(config, without('*.service'), '@Danathar').join('\n'), /\*\.service/);
     assert.match(checkCodeowners(config, CODEOWNERS.replace('/LICENSE ', '/LICENSE @someone-else # '), '@Danathar').join('\n'), /LICENSE/);
-    assert.match(checkCodeowners(config, without('* @Danathar'), '@Danathar').join('\n'), /"\*" must default/);
+    assert.match(checkCodeowners(config, `* @Danathar\n${CODEOWNERS}`, '@Danathar').join('\n'), /no "\*" entry/);
 });
 
 test('codeowners: checkAll reports a drop in a real tree and a bad owner field', () => {
