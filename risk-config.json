@@ -54,6 +54,7 @@
                 ".github/prompts/**",
                 ".claude/skills/**",
                 ".claude/memory/**",
+                ".claude/session-summary.md",
                 "docs/risk-tiers.md",
                 "docs/agent-boundaries.md",
                 "docs/security/**"

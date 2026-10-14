@@ -64,7 +64,8 @@ Changing these relaxes the agent boundary itself, so a green CI run is not
 enough and the owner reads the diff:
 
 - `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursor/rules/`,
-  `.github/prompts/`, `.claude/skills/`, `.claude/memory/`
+  `.github/prompts/`, `.claude/skills/`, `.claude/memory/`,
+  `.claude/session-summary.md`
 - `.claude/settings.json` and `.claude/hooks/` (the permission table and the
   Bash guard that enforces the host rule)
 - `policies/`, `scripts/check-policies.mjs`, `risk-config.json`, `renovate.json`,

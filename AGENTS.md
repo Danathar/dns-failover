@@ -108,7 +108,7 @@ Changes are classified by what they touch; the full list is in
   both installers, `configure.py`, `monitor.py`, `dns-upstream-check.py`.
 - **Tier 2, high** (owner review): `dns-upstream-probe.py`, units, dnsmasq and
   Stubby configs, `pyproject.toml`, tool-specific agent files, skills, memory,
-  `docs/security/`.
+  the session summary, `docs/security/`.
 - **Tier 3, standard:** everything else.
 
 ## Where things go
