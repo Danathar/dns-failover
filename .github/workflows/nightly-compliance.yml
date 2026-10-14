@@ -114,6 +114,17 @@ jobs:
           node --test 'scripts/tests/*.test.mjs'
           node --test '.claude/hooks/tests/*.test.mjs'
 
+      - name: Live ruleset matches .github/rulesets/main.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # bypass_actors is returned only to admins, so it is not compared here.
+          fields='{name,target,enforcement,conditions,rules}'
+          diff <(gh api "repos/$REPO/rulesets/24900573" --jq "$fields" | jq -S .) \
+               <(jq -S "$fields" .github/rulesets/main.json)
+
   e2e:
     name: E2E (debian container)
     runs-on: ubuntu-latest
