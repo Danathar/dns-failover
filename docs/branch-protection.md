@@ -43,6 +43,10 @@ GitHub returns `bypass_actors` only to a repository admin. Anyone else gets
 above leaves the field out. The owner checks it as well by adding
 `bypass_actors` to both field lists; that diff must also print nothing.
 
+The nightly compliance workflow runs the same comparison every night and fails
+the `policies` job when the live ruleset differs from the file, so a drift
+reaches the nightly tracking issue instead of waiting for someone to look.
+
 GitHub fills in defaults for `pull_request` parameters that were not sent
 (`require_extra_approval_for_unattributed_changes: true`,
 `required_reviewers: []`); the file spells them out so this diff stays empty.

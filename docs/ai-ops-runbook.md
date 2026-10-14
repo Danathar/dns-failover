@@ -81,7 +81,7 @@ workflow permanently, delete the file in a pull request.
 | `policy-check.yml` | `Policy check` | runs `scripts/check-policies.mjs` over `policies/` and `risk-config.json`, then its tests; pull requests and pushes to `main` |
 | `agent-tooling.yml` | `Agent tooling` | `node --test 'scripts/tests/*.test.mjs'` and `node --test '.claude/hooks/tests/*.test.mjs'`; pull requests and pushes to `main` |
 | `pr-metrics.yml` | `PR metrics` | scheduled and manual: runs `scripts/pr-metrics.mjs`, writes a step summary and an artifact; read-only ([`metrics.md`](metrics.md)) |
-| `nightly-compliance.yml` | `Nightly compliance` | scheduled and manual: repeats the test and lint jobs; on failure opens or updates one tracking issue and never closes it |
+| `nightly-compliance.yml` | `Nightly compliance` | scheduled and manual: repeats the test and lint jobs and checks that the live branch ruleset matches `.github/rulesets/main.json`; on failure opens or updates one tracking issue and never closes it |
 | `auto-qa.yml` | `Auto-QA` | scheduled and manual: measures coverage, runs `scripts/auto-qa-tuner.mjs` with `.github/auto-qa-tuning.json`, and opens or updates one issue proposing a higher floor; never commits, never lowers a floor |
 | `agent-audit.yml` | `Agent audit trail` | scheduled and manual: `scripts/ai-audit-report.mjs` checks agent PRs for a linked issue, a signature line and a human (or Hive lane) merger; a violation turns the run red, nothing is written |
 | `auto-issues.yml` | `Auto issues` | when `CI` fails on a push to `main`, opens or comments on one tracking issue; never closes it |

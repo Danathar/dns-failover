@@ -24,7 +24,7 @@ commands under "Where to look".
 | PR metrics | [`.github/workflows/pr-metrics.yml`](../.github/workflows/pr-metrics.yml), definitions in [metrics.md](metrics.md), readings in [metrics/](metrics/README.md) | acceptance rate and time to merge, by author class | no, report only |
 | auto-QA | `.github/workflows/auto-qa.yml`, rules in `.github/auto-qa-tuning.json` | weekly: when the coverage floor can be raised, one issue with the proposed diff; it never pushes and never lowers the floor | no, report only |
 | agent audit | `.github/workflows/agent-audit.yml`, `scripts/ai-audit-report.mjs` | weekly: each merged agent PR has a linked issue, the signature line and an acceptable merger | no, scheduled |
-| nightly compliance | `.github/workflows/nightly-compliance.yml` | every night against `main`: the test suites and the container e2e test again; a scheduled failure opens or updates one tracking issue | no, notification |
+| nightly compliance | `.github/workflows/nightly-compliance.yml` | every night against `main`: the test suites and the container e2e test again, plus a check that the live branch ruleset matches `.github/rulesets/main.json`; a scheduled failure opens or updates one tracking issue | no, notification |
 
 The first four rows are the required checks: the job display names (`Lint`,
 `Unit tests (debian 12)`, `Unit tests (debian 13)`,
