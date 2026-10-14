@@ -285,8 +285,9 @@ export function codeownersPattern(glob) {
 
 /**
  * Every path of a tier whose review is `owner` must be listed in CODEOWNERS
- * with the owner, and `*` must default to the owner, so the review request
- * cannot drift from docs/risk-tiers.md.
+ * with the owner, so the required review cannot drift from docs/risk-tiers.md.
+ * There must be no `*` entry: the ruleset requires code owner review, so a
+ * catch-all would make every pull request, Tier 3 included, wait for the owner.
  */
 export function checkCodeowners(config, text, owner) {
     const v = [];
@@ -297,8 +298,8 @@ export function checkCodeowners(config, text, owner) {
         const [pat, ...owners] = line.split(/\s+/);
         entries.set(pat, owners);
     }
-    if (!(entries.get('*') ?? []).includes(owner)) {
-        v.push(`.github/CODEOWNERS: "*" must default to ${owner}`);
+    if (entries.has('*')) {
+        v.push('.github/CODEOWNERS: no "*" entry; code owner review is required, so it would cover every pull request');
     }
     for (const t of config.tiers) {
         if (t.review !== 'owner') continue;
