@@ -914,6 +914,72 @@ test('codeowners: checkAll reports a later entry that overrides the owner', () =
     assert.ok(v.some((x) => /file "tailscale-dns-failover\/configure\.py" ends up with no owner/.test(x)), v.join('|'));
 });
 
+test('codeowners: a wildcard before the last segment still reaches nested files', () => {
+    // `*/hooks` names a directory, so it covers everything under it even
+    // though an earlier segment is a wildcard; only a wildcard in the last
+    // segment stops at that depth.
+    assert.ok(codeownersRegExp('*/hooks').test('.claude/hooks/tests/guard-bash.test.mjs'));
+    const config = JSON.parse(RISK);
+    const v = checkCodeowners(config, `${CODEOWNERS}*/hooks\n`, config.owner, walk(repoRoot));
+    assert.match(v.join('\n'), /tier 1 file "\.claude\/hooks\/guard-bash\.mjs" ends up with no owner: .*"\*\/hooks"/);
+});
+
+test('codeowners: a ? in a later owner entry does not win back a file across a /', () => {
+    // `?` matches one character inside a segment, as in GitHub, so this owner
+    // entry covers nothing and the unowned `/.claude/` line still applies.
+    const config = JSON.parse(RISK);
+    const text = `${CODEOWNERS}/.claude/\n/.claude?settings.json @Danathar\n`;
+    const v = checkCodeowners(config, text, config.owner, walk(repoRoot));
+    assert.match(v.join('\n'), /tier 1 file "\.claude\/settings\.json" ends up with no owner: .*"\/\.claude\/"/);
+});
+
+test('globToRegExp: ? matches exactly one character and never a /', () => {
+    assert.ok(globToRegExp('stubby-?.yml').test('stubby-a.yml'));
+    assert.ok(!globToRegExp('stubby-?.yml').test('stubby-ab.yml'));
+    assert.ok(!globToRegExp('stubby-?.yml').test('stubby-.yml'));
+    assert.ok(!globToRegExp('a?b').test('a/b'));
+});
+
+test('workflows: an inline top-level permissions map that grants write fails', () => {
+    const flow = GOOD_WF.replace('permissions:\n  contents: read', 'permissions: { contents: write }');
+    const v = run({ '.github/workflows/a.yml': flow });
+    assert.equal(v.length, 1, v.join('|'));
+    assert.match(v[0], /a\.yml:4: top-level permissions grant write$/);
+    const readOnly = GOOD_WF.replace('permissions:\n  contents: read', 'permissions: { contents: read }');
+    assert.deepEqual(run({ '.github/workflows/a.yml': readOnly }), []);
+    // write-all is reported once, not again as an inline write grant.
+    const all = GOOD_WF.replace('permissions:\n  contents: read', 'permissions: write-all');
+    assert.equal(run({ '.github/workflows/a.yml': all }).length, 1);
+});
+
+test('a policy file that is not valid JSON is a violation', () => {
+    const v = run({ 'policies/installer-safety.json': '{ "rules": [' });
+    assert.ok(v.some((x) => /^policies\/installer-safety\.json: invalid JSON \(/.test(x)), v.join('|'));
+});
+
+test('a missing docs/risk-tiers.md is a violation', () => {
+    const dir = fixture({});
+    fs.rmSync(path.join(dir, 'docs/risk-tiers.md'));
+    try {
+        assert.ok(checkAll(dir).includes('docs/risk-tiers.md: missing'));
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('risk tiers: an empty tier list and a repeated tier number fail', () => {
+    assert.deepEqual(checkRiskTiers({ ...RISK_FIXTURE, tiers: [] }, TABLE), [
+        'risk-config.json: "tiers" must be a non-empty array',
+    ]);
+    assert.deepEqual(checkRiskTiers({ default_tier: 2 }, TABLE), [
+        'risk-config.json: "tiers" must be a non-empty array',
+    ]);
+    const cfg = structuredClone(RISK_FIXTURE);
+    cfg.tiers[1].tier = 1;
+    assert.match(checkRiskTiers(cfg, TABLE).join('\n'), /risk-config\.json: duplicate tier numbers/);
+    assert.ok(!checkRiskTiers(RISK_FIXTURE, TABLE).some((x) => /duplicate/.test(x)));
+});
+
 test('risk tiers: a pipe in a command is escaped in the table and compared unescaped', () => {
     const cfg = structuredClone(RISK_FIXTURE);
     cfg.tiers[0].required_commands.push("git ls-files '*.sh' | xargs shellcheck");
