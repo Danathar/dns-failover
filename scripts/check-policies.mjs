@@ -288,7 +288,9 @@ export function codeownersPattern(glob) {
  * GitHub's gitignore-style rules: a leading or inner `/` anchors the pattern
  * to the repository root, otherwise it matches at any depth; a trailing `/`
  * matches only what is under that directory; a pattern that names a directory
- * without the trailing `/` covers everything under it as well.
+ * without the trailing `/` covers everything under it as well. A wildcard in
+ * the last segment stops at that depth: GitHub documents that `docs/*` owns
+ * `docs/getting-started.md` but not `docs/build-app/troubleshooting.md`.
  */
 export function codeownersRegExp(pattern) {
     let p = pattern;
@@ -298,7 +300,9 @@ export function codeownersRegExp(pattern) {
     if (p.startsWith('/')) p = p.slice(1);
     const body = globToRegExp(p).source.slice(1, -1);
     const prefix = anchored ? '' : '(?:.*/)?';
-    return new RegExp(`^${prefix}${body}${dirOnly ? '/.*' : '(?:/.*)?'}$`);
+    const last = p.slice(p.lastIndexOf('/') + 1).replaceAll('**', '');
+    const tail = dirOnly ? '/.*' : /[*?]/.test(last) ? '' : '(?:/.*)?';
+    return new RegExp(`^${prefix}${body}${tail}$`);
 }
 
 /**

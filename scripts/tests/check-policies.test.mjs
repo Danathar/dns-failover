@@ -860,6 +860,12 @@ test('codeowners: patterns match the way GitHub applies them', () => {
     assert.ok(codeownersRegExp('/tailscale-dns-failover').test('tailscale-dns-failover/monitor.py'));
     // `*` stays inside one path segment.
     assert.ok(!codeownersRegExp('/docs/*.md').test('docs/security/SECURITY-AI.md'));
+    // A wildcard last segment does not reach nested files (GitHub's `docs/*`
+    // example), while `**` still does.
+    assert.ok(codeownersRegExp('/.claude/hooks/*').test('.claude/hooks/guard-bash.mjs'));
+    assert.ok(!codeownersRegExp('/.claude/hooks/*').test('.claude/hooks/tests/guard-bash.test.mjs'));
+    assert.ok(!codeownersRegExp('docs/*').test('docs/security/SECURITY-AI.md'));
+    assert.ok(codeownersRegExp('/.claude/hooks/**').test('.claude/hooks/tests/guard-bash.test.mjs'));
 });
 
 test('codeowners: every owner-review file of this repository ends up with the owner', () => {
@@ -883,6 +889,11 @@ test('codeowners: a later entry that takes a Tier 1 or 2 file off the owner fail
         const v = checkCodeowners(config, `${CODEOWNERS}${line}\n`, config.owner, files);
         assert.match(v.join('\n'), want, line);
     }
+    // A one-level owner entry after an unowned one does not win back nested
+    // files: GitHub's `dir/*` stops at that depth, so `*.mjs` still applies.
+    const nested = checkCodeowners(config, `${CODEOWNERS}*.mjs\n/.claude/hooks/* @Danathar\n`, config.owner, files);
+    assert.match(nested.join('\n'), /tier 1 file "\.claude\/hooks\/tests\/guard-bash\.test\.mjs" ends up with no owner: .*"\*\.mjs"/);
+    assert.ok(!nested.some((x) => /file "\.claude\/hooks\/guard-bash\.mjs"/.test(x)), nested.join('|'));
     // The same entry placed before the owner's entries is overridden by them.
     assert.deepEqual(checkCodeowners(config, `*.py\n${CODEOWNERS}`, config.owner, files), []);
     // A later entry that keeps the owner, or only covers Tier 3 files, is fine.
