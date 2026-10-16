@@ -1,5 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 import {
     auditPr,
@@ -241,4 +246,128 @@ test('exit code 2 for bad input, bad flags and truncated lists', () => {
         assert.throws(() => parseArgs(['--since', bad]), /real date/);
     }
     assert.equal(parseArgs(['--since', '2028-02-29']).since, '2028-02-29');
+});
+
+// Replaces process.stdout.write / process.stderr.write for one call and
+// returns what was written there.
+function capture(stream, fn) {
+    const original = stream.write;
+    let text = '';
+    stream.write = (chunk) => {
+        text += String(chunk);
+        return true;
+    };
+    try {
+        return { result: fn(), text };
+    } finally {
+        stream.write = original;
+    }
+}
+
+test('--input names the file that is read; without it stdin (fd 0) is read', () => {
+    const paths = [];
+    const reader = (p) => {
+        paths.push(p);
+        return '[]';
+    };
+    assert.equal(main(['--input', 'merged.json', '--output', 'x.md'], reader, () => {}), 0);
+    assert.equal(main(['--output', 'x.md'], reader, () => {}), 0);
+    assert.deepEqual(paths, ['merged.json', 0]);
+});
+
+test('every flag that takes a value refuses to be last', () => {
+    for (const flag of ['--input', '--since', '--limit', '--output']) {
+        assert.throws(() => parseArgs([flag]), new RegExp(`${flag} needs a value`));
+        assert.throws(() => parseArgs(['--strict', flag]), /needs a value/);
+    }
+});
+
+test('--limit must be a positive integer, so the truncation guard cannot be switched off', () => {
+    for (const bad of ['0', '-1', '1.5', 'abc', '', '1e400']) {
+        assert.throws(() => parseArgs(['--limit', bad]), /--limit must be a positive integer/);
+    }
+    assert.equal(parseArgs(['--limit', '500']).limit, 500);
+    assert.equal(parseArgs([]).limit, null);
+    // Fewer PRs than the limit is a complete list and is audited.
+    assert.equal(run(['--limit', '2', '--output', 'x.md'], [pr()]).code, 0);
+});
+
+test('--output writes the rendered report, filtered by --since, to that path', () => {
+    const old = pr({ number: 2, mergedAt: '2026-09-30T23:59:59Z' });
+    // Merged on the --since day itself is inside the window.
+    const sameDay = pr({ number: 3, mergedAt: '2026-10-01T00:00:00Z' });
+    const prs = [pr(), old, sameDay];
+    const calls = [];
+    const { result: code, text } = capture(process.stdout, () =>
+        main(
+            ['--since', '2026-10-01', '--output', 'report.md'],
+            () => JSON.stringify(prs),
+            (p, content) => calls.push([p, content])
+        )
+    );
+    assert.equal(code, 0);
+    assert.equal(text, '', 'with --output nothing goes to stdout');
+    assert.equal(calls.length, 1);
+    const [p, content] = calls[0];
+    assert.equal(p, 'report.md');
+    assert.equal(content, renderMarkdown(buildReport(prs, { since: '2026-10-01' })));
+    assert.match(content, /merged since 2026-10-01/);
+    assert.match(content, /^2 merged PR\(s\) in the window/m);
+    assert.match(content, /\[#3\]/);
+    assert.equal(content.includes('[#2]'), false);
+});
+
+test('without --output the report goes to stdout and no file is written', () => {
+    let wrote = false;
+    const { result: code, text } = capture(process.stdout, () =>
+        main([], () => JSON.stringify([pr()]), () => {
+            wrote = true;
+        })
+    );
+    assert.equal(code, 0);
+    assert.equal(wrote, false);
+    assert.equal(text, renderMarkdown(buildReport([pr()])) + '\n');
+});
+
+test('exit code 2 names the problem on stderr', () => {
+    const { result: code, text } = capture(process.stderr, () =>
+        main(['--limit', '1', '--output', 'x.md'], () => JSON.stringify([pr()]), () => {})
+    );
+    assert.equal(code, 2);
+    assert.match(text, /^ai-audit-report: 1 PRs reached the --limit of 1; the list may be truncated/);
+});
+
+test('run as a script, the exit code reaches the shell the way agent-audit.yml calls it', () => {
+    const script = fileURLToPath(new URL('../ai-audit-report.mjs', import.meta.url));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-audit-report-'));
+    try {
+        const cli = (prs) => {
+            const input = path.join(dir, 'merged.json');
+            const output = path.join(dir, 'report.md');
+            fs.rmSync(output, { force: true });
+            fs.writeFileSync(input, JSON.stringify(prs));
+            const r = spawnSync(
+                process.execPath,
+                [script, '--input', input, '--since', '2026-10-01', '--limit', '500', '--strict', '--output', output],
+                { encoding: 'utf8' }
+            );
+            const report = fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : null;
+            return { status: r.status, stderr: r.stderr, report };
+        };
+
+        const clean = cli([pr()]);
+        assert.equal(clean.status, 0, clean.stderr);
+        assert.match(clean.report, /All audited agent PRs meet the audit-trail requirements/);
+
+        const bad = cli([pr({ mergedBy: { login: 'some-other-app[bot]', is_bot: true } })]);
+        assert.equal(bad.status, 1, bad.stderr);
+        assert.match(bad.report, /violates: human-merge/);
+
+        const truncated = cli(Array.from({ length: 500 }, (_, i) => pr({ number: i + 1 })));
+        assert.equal(truncated.status, 2);
+        assert.equal(truncated.report, null);
+        assert.match(truncated.stderr, /reached the --limit of 500/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 });
