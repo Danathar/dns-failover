@@ -8,6 +8,7 @@ rejection in `normalize`, the DoH probe in `profile_healthy`, and `main`'s
 in every test, so nothing here reaches the network or the Tailscale API.
 """
 import base64
+import http.client
 import io
 import json
 import stat
@@ -304,7 +305,13 @@ def test_profile_healthy_needs_only_one_good_answer(monkeypatch):
     assert monitor.profile_healthy("example") is True
 
 
-@pytest.mark.parametrize("error", [urllib.error.URLError("down"), TimeoutError(), ValueError("bad")])
+@pytest.mark.parametrize("error", [
+    urllib.error.URLError("down"),
+    TimeoutError(),
+    ValueError("bad"),
+    http.client.IncompleteRead(b""),
+    http.client.BadStatusLine("x"),
+])
 def test_profile_healthy_is_false_when_every_query_fails(error, monkeypatch):
     def fake(request, timeout):
         raise error

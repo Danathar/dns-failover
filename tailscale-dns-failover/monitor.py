@@ -4,6 +4,7 @@ import argparse
 import base64
 import concurrent.futures
 import copy
+import http.client
 import ipaddress
 import json
 import os
@@ -186,7 +187,7 @@ def profile_healthy(profile):
         try:
             with urllib.request.urlopen(request, timeout=3) as response:
                 return good_dns_answer(response.read(65536), query_id)
-        except (OSError, ValueError):
+        except (OSError, ValueError, http.client.HTTPException):
             return False
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         return any(list(pool.map(query, ('example.com', 'cloudflare.com'))))
