@@ -59,6 +59,11 @@ const allowed = [
     'git diff --stat origin/main...HEAD',
     'git diff --no-ext-diff HEAD~1',
     'git show HEAD:dns-upstream-check.py',
+    // A pattern is protected only when it can match a protected name, whole:
+    // `check*.py` cannot be dns-upstream-check.py, and an unclosed `[` is a literal.
+    'python3 scripts/check*.py',
+    'python3 tests/unit/test_*.py',
+    'python3 scripts/run[.py',
     'GIT_PAGER=cat git log -1',
     'PAGER=cat git diff',
     'GIT_EDITOR=true git rebase --continue',
@@ -567,10 +572,29 @@ const hostBlocked = [
     ['bash -n x.sh && ./configure.py', 'would execute'],
     // A wildcard or brace spelling the shell expands into a protected script
     ['python3 tailscale-dns-failover/monit[o]r.py --dry-run', 'would execute'],
+    // Bracket-expression edges globToRegExp/bracketEnd handle (ported from
+    // openaudible-autoupdate#111 with their tests there): a class, an unclosed
+    // `[:` read as a member, a negated set with a leading `]`, a leading `]`.
+    ['python3 tailscale-dns-failover/monit[[:alpha:]]r.py --dry-run', 'would execute'],
+    ['python3 tailscale-dns-failover/monit[[:o]r.py --dry-run', 'would execute'],
+    ['python3 tailscale-dns-failover/monit[!]x]r.py --dry-run', 'would execute'],
+    ['python3 tailscale-dns-failover/monit[]o]r.py --dry-run', 'would execute'],
+    // A pattern spelling of the checker is refused even with the safe flags:
+    // the hook cannot see which file the pattern picks.
+    [`python3 dns-upstream-che?k.py ${UPSTREAM_OK}`, 'would execute'],
     ['python3 tailscale-dns-failover/monit?r.py', 'would execute'],
     ['python3 tailscale-dns-failover/monitor.p*', 'would execute'],
     ['python3 tailscale-dns-failover/m*.py', 'would execute'],
     ['./tailscale-dns-failover/monit[o]r.py', 'would execute'],
+    // A closed `[=o=]` / `[.o.]` is a class inside the set, and its `]` does
+    // not end the set. bash matches the `o` in each of these.
+    ['python3 tailscale-dns-failover/monit[[=o=]]r.py', 'would execute'],
+    ['python3 tailscale-dns-failover/monit[[.o.]]r.py', 'would execute'],
+    // `[.].]` is the collating symbol `]`: the `.` that opens it does not
+    // also close it.
+    ['python3 tailscale-dns-failover/monit[[.].]o]r.py', 'would execute'],
+    // An empty class `[..]` closes right after it opens.
+    ['python3 tailscale-dns-failover/monit[[..]o]r.py', 'would execute'],
     ['python3 tailscale-dns-failover/mon{itor,x}.py', 'would execute'],
     ['python3 tailscale-dns-failover/configur?.py', 'would execute'],
     ['sh tailscale-dns-failover/inst[a]ll.sh', 'would execute'],
