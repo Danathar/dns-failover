@@ -59,6 +59,11 @@ const allowed = [
     'git diff --stat origin/main...HEAD',
     'git diff --no-ext-diff HEAD~1',
     'git show HEAD:dns-upstream-check.py',
+    // A pattern is protected only when it can match a protected name, whole:
+    // `check*.py` cannot be dns-upstream-check.py, and an unclosed `[` is a literal.
+    'python3 scripts/check*.py',
+    'python3 tests/unit/test_*.py',
+    'python3 scripts/run[.py',
     'GIT_PAGER=cat git log -1',
     'PAGER=cat git diff',
     'GIT_EDITOR=true git rebase --continue',
@@ -104,6 +109,10 @@ const allowed = [
     'git -c push.default=current push origin main',
     'gh pr create --repo Danathar/dns-failover --base main --head b --body "-Bump deps" --title "-Hx"',
     'git config --get remote.origin.url',
+    // --show-origin / --show-scope only change how a read is printed.
+    'git config --show-origin --list',
+    'git config --show-scope --get remote.origin.url',
+    'git config get --show-origin remote.origin.url',
     'git config remote.origin.url',
     'git config user.name x',
     'env FOO=1 git status',
@@ -328,6 +337,11 @@ const blocked = [
     ['git config rename-section foo remote.origin', 'rename-section'],
     ['git config --rename-section foo remote.origin', 'rename-section'],
     ['git config rename-section remote.origin foo', 'could redirect'],
+    // --show-origin / --show-scope are display modifiers, not read modes: these still write.
+    ['git config --show-scope remote.origin.url https://example.invalid/x', 'could redirect'],
+    ['git config --show-origin remote.origin.pushurl https://example.invalid/x', 'could redirect'],
+    ['git config set --show-scope remote.origin.pushurl https://example.invalid/x', 'could redirect'],
+    ['git config --show-scope url.https://example.invalid/.insteadOf https://github.com/Danathar/', 'could redirect'],
     // Compound commands, subshells, wrappers.
     ['git status && gh pr create --title t', 'no --repo'],
     ['git status; gh issue create --title t', 'no --repo'],
@@ -556,6 +570,35 @@ const hostBlocked = [
     ['distrobox-host-exec ./monitor.py', 'would execute'],
     ['sh -c -- ./monitor.py', 'would execute'],
     ['bash -n x.sh && ./configure.py', 'would execute'],
+    // A wildcard or brace spelling the shell expands into a protected script
+    ['python3 tailscale-dns-failover/monit[o]r.py --dry-run', 'would execute'],
+    // Bracket-expression edges globToRegExp/bracketEnd handle (ported from
+    // openaudible-autoupdate#111 with their tests there): a class, an unclosed
+    // `[:` read as a member, a negated set with a leading `]`, a leading `]`.
+    ['python3 tailscale-dns-failover/monit[[:alpha:]]r.py --dry-run', 'would execute'],
+    ['python3 tailscale-dns-failover/monit[[:o]r.py --dry-run', 'would execute'],
+    ['python3 tailscale-dns-failover/monit[!]x]r.py --dry-run', 'would execute'],
+    ['python3 tailscale-dns-failover/monit[]o]r.py --dry-run', 'would execute'],
+    // A pattern spelling of the checker is refused even with the safe flags:
+    // the hook cannot see which file the pattern picks.
+    [`python3 dns-upstream-che?k.py ${UPSTREAM_OK}`, 'would execute'],
+    ['python3 tailscale-dns-failover/monit?r.py', 'would execute'],
+    ['python3 tailscale-dns-failover/monitor.p*', 'would execute'],
+    ['python3 tailscale-dns-failover/m*.py', 'would execute'],
+    ['./tailscale-dns-failover/monit[o]r.py', 'would execute'],
+    // A closed `[=o=]` / `[.o.]` is a class inside the set, and its `]` does
+    // not end the set. bash matches the `o` in each of these.
+    ['python3 tailscale-dns-failover/monit[[=o=]]r.py', 'would execute'],
+    ['python3 tailscale-dns-failover/monit[[.o.]]r.py', 'would execute'],
+    // `[.].]` is the collating symbol `]`: the `.` that opens it does not
+    // also close it.
+    ['python3 tailscale-dns-failover/monit[[.].]o]r.py', 'would execute'],
+    // An empty class `[..]` closes right after it opens.
+    ['python3 tailscale-dns-failover/monit[[..]o]r.py', 'would execute'],
+    ['python3 tailscale-dns-failover/mon{itor,x}.py', 'would execute'],
+    ['python3 tailscale-dns-failover/configur?.py', 'would execute'],
+    ['sh tailscale-dns-failover/inst[a]ll.sh', 'would execute'],
+    ['sh install-dns-failove?.sh', 'would execute'],
     // The protected script read through <, a pipe chain, a heredoc or a substitution
     ['sh<install-dns-failover.sh', 'stdin'],
     ['bash < install-dns-failover.sh', 'stdin'],

@@ -728,7 +728,9 @@ function checkGit(args, inlineEnv = {}, exported = {}) {
 
 /** Writes to push-redirecting config keys (`git config remote.origin.url ...`). */
 function checkGitConfig(rest) {
-    const readOnly = ['--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l', '--show-origin', '--show-scope'];
+    // Only flags that pick a read mode. --show-origin/--show-scope are display
+    // modifiers: `git config --show-scope remote.origin.url URL` still writes.
+    const readOnly = ['--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l'];
     if (rest.some((a) => readOnly.includes(a))) return null;
 
     // Collect positionals, skipping the values of options that take one
@@ -1263,10 +1265,68 @@ const CHECKERS = new Set(['dns-upstream-check.py', 'dns-upstream-check']);
 // The installed copy of monitor.py is /usr/local/sbin/tailscale-dns-failover (tailscale-dns-failover/install.sh).
 const PY_ONLY = new Set(['configure.py', 'monitor.py', 'tailscale-dns-failover']);
 const isChecker = (word) => CHECKERS.has(basename(String(word)));
-/** True for a protected script in any path form (`./monitor.py`, `tailscale-dns-failover/install.sh`, ...). */
+const PROTECTED_NAMES = [...INSTALLERS, ...CHECKERS, ...PY_ONLY];
+/**
+ * True for a protected script in any path form (`./monitor.py`,
+ * `tailscale-dns-failover/install.sh`, ...), or for a word whose file name the
+ * shell could expand into one: a pathname pattern that matches a protected
+ * name (`monit?r.py`, `monitor.p*`, `inst[a]ll.sh`) or a brace expansion,
+ * which can build any name (`mon{itor,x}.py`). The tokenizer has already
+ * dropped quotes, so a quoted `*` counts too.
+ */
 export function isProtected(word) {
-    const name = basename(String(word));
-    return INSTALLERS.has(name) || CHECKERS.has(name) || PY_ONLY.has(name);
+    const w = String(word);
+    const name = basename(w);
+    if (INSTALLERS.has(name) || CHECKERS.has(name) || PY_ONLY.has(name)) return true;
+    const last = w.slice(w.lastIndexOf('/') + 1);
+    if (/[{}]/.test(last)) return true;
+    if (!/[*?[]/.test(last)) return false;
+    const re = new RegExp(`^${globToRegExp(last)}$`, 's');
+    return PROTECTED_NAMES.some((n) => re.test(n));
+}
+
+/**
+ * A pathname pattern as a regular expression that matches at least every
+ * name the shell would match: `*` and `?` as in the shell, and a bracket
+ * expression (with `[:class:]` parts and a leading `]` handled) as any one
+ * character. An unclosed `[` is a literal, as in the shell.
+ */
+function globToRegExp(pattern) {
+    let re = '';
+    for (let i = 0; i < pattern.length; i++) {
+        const c = pattern[i];
+        if (c === '*') {
+            re += '.*';
+        } else if (c === '?') {
+            re += '.';
+        } else if (c === '[' && bracketEnd(pattern, i) !== -1) {
+            re += '.';
+            i = bracketEnd(pattern, i);
+        } else {
+            re += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+    }
+    return re;
+}
+
+/** Index of the `]` closing the bracket expression opened at `start`, or -1. */
+function bracketEnd(pattern, start) {
+    let j = start + 1;
+    if (pattern[j] === '!' || pattern[j] === '^') j++;
+    if (pattern[j] === ']') j++;
+    while (j < pattern.length) {
+        if (pattern[j] === '[' && ':=.'.includes(pattern[j + 1] ?? 'x')) {
+            // An unclosed `[:` / `[=` / `[.` is no class: the shell takes the
+            // `[` as one more member of the set (`[[:a]` matches `[`, `:` or `a`).
+            const close = pattern.indexOf(`${pattern[j + 1]}]`, j + 2);
+            j = close === -1 ? j + 1 : close + 2;
+        } else if (pattern[j] === ']') {
+            return j;
+        } else {
+            j++;
+        }
+    }
+    return -1;
 }
 // Code text (python -c, a script piped to python) that names a protected script or the Tailscale API.
 const PROTECTED_TEXT = /install[-_]dns[-_]failover|dns[-_]upstream[-_]check|\bmonitor\b|\bconfigure\b|in-container|tailscale\.com/i;
