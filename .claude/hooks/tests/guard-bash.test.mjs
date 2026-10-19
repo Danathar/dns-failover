@@ -190,6 +190,14 @@ const allowed = [
     'podman ps',
     'gh pr view https://github.com/someone/other/pull/9',
     'gh pr create --repo Danathar/dns-failover --base main --head acmm/claude-learning --title t --body "never run sudo"',
+    // `time` (keyword and /usr/bin/time) runs the command after its own options.
+    'time -p git status',
+    'time -p python3 -m pytest',
+    '/usr/bin/time -o /var/tmp/t git status',
+    // A wrapper option's value is not the command it runs.
+    'env -a git git status',
+    'exec -a git git status',
+    'env - git status',
 ];
 
 const blocked = [
@@ -382,6 +390,26 @@ const blocked = [
     ["printf '%s\\n' +n -c id | xargs bash -n", 'xargs bash'],
     ["echo --import=data:text/javascript,0 | xargs -n9 node --test", 'xargs node'],
     ['find . -name x | xargs -I{} timeout 5 git diff {}', 'xargs git'],
+    // `time -p` and /usr/bin/time options are not the command being timed.
+    ['time -p git push --force origin main', 'force'],
+    ['time -- git push --force origin main', 'force'],
+    ['/usr/bin/time git push --force origin main', 'force'],
+    ['/usr/bin/time -f %e git push --force origin main', 'force'],
+    ['/usr/bin/time -o git git push --force origin main', 'force'],
+    ['/usr/bin/time --out x git push --force origin main', 'force'],
+    // env's lone `-` (old -i) is an option, not the command.
+    ['env - git push --force origin main', 'force'],
+    ['time env - git push --force origin main', 'force'],
+    // -a NAME (env --argv0, exec -a) takes a value word.
+    ['env -a git git push --force origin main', 'force'],
+    ['env --argv0 git git push --force origin main', 'force'],
+    ['exec -a git git push --force origin main', 'force'],
+    // Packed and abbreviated env options still reach -S.
+    ["env -iS'gh pr create --title t'", 'no --repo'],
+    ["env --sp='gh pr create --title t'", 'no --repo'],
+    ["env -a X -S'git push --force origin main'", 'force'],
+    ['env -iu X git push --force origin main', 'force'],
+    ['env --uns X git push --force origin main', 'force'],
 ];
 
 // ---------------------------------------------------------------------------
@@ -893,6 +921,18 @@ const hostBlocked = [
     ['git push --force-if origin main', 'force push'],
     ['git push --mirr origin', 'overwrites the remote'],
     ['git push --rep=https://example.com/x.git main', 'redirects the push'],
+    // --- time and env options are skipped to reach the real command ---
+    ['time -p sudo id', 'privilege'],
+    ['time -- sudo id', 'privilege'],
+    ['/usr/bin/time sudo id', 'privilege'],
+    ['/usr/bin/time -o x sudo id', 'privilege'],
+    ['/usr/bin/time -po x sudo id', 'privilege'],
+    ['time -p ./install-dns-failover.sh', 'would execute'],
+    ['time -p python3 tailscale-dns-failover/monitor.py', 'would execute'],
+    ['time -p systemctl restart dnsmasq', 'systemctl restart'],
+    ['env - sudo id', 'privilege'],
+    ['env - ./install-dns-failover.sh', 'would execute'],
+    ['exec -a x ./install-dns-failover.sh', 'would execute'],
 ];
 
 test('pytest is refused when the payload says the shell is outside the project', () => {
