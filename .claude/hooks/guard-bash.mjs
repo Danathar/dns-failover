@@ -176,11 +176,13 @@ const GH_OTHER_READONLY = {
 };
 
 // Words that may precede the real command and carry no meaning for us.
-const KEYWORDS = new Set(['{', '}', '!', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', 'time']);
+const KEYWORDS = new Set(['{', '}', '!', 'if', 'then', 'else', 'elif', 'do', 'while', 'until']);
 // Wrappers that run another command; we look through them for gh/git/shells.
+// `time` is here rather than in KEYWORDS: the keyword takes `-p` and `--`, and
+// /usr/bin/time takes options too, so its own options must be skipped.
 const WRAPPERS = new Set([
     'env', 'command', 'builtin', 'exec', 'nohup', 'sudo', 'nice', 'xargs',
-    'timeout', 'setsid', 'stdbuf', 'ionice', 'chronic',
+    'timeout', 'setsid', 'stdbuf', 'ionice', 'chronic', 'time',
 ]);
 const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash']);
 
@@ -1651,11 +1653,80 @@ function hostMountRefusal(args, state) {
 const WRAPPER_VALUE_OPTS = {
     timeout: ['-s', '--signal', '-k', '--kill-after'],
     nice: ['-n', '--adjustment'],
-    xargs: ['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--delimiter', '--arg-file'],
-    stdbuf: ['-i', '-o', '-e'],
-    ionice: ['-c', '-n', '-p', '-P', '-u'],
-    env: ['-u', '--unset', '-C', '--chdir'],
+    xargs: ['-n', '-I', '-L', '-P', '-s', '-d', '-E', '-a', '--max-args', '--max-procs', '--max-chars', '--delimiter', '--arg-file', '--process-slot-var'],
+    stdbuf: ['-i', '-o', '-e', '--input', '--output', '--error'],
+    ionice: ['-c', '-n', '-p', '-P', '-u', '--class', '--classdata', '--pid', '--pgid', '--uid'],
+    env: ['-u', '--unset', '-C', '--chdir', '-a', '--argv0'],
+    exec: ['-a'],
+    time: ['-f', '--format', '-o', '--output'],
 };
+
+// Each wrapper's options as getopt reads them: the short letters that take a
+// value, the short letters whose value is optional (`-i[R]`: only the rest of
+// the same word, never the next word), and every long name (getopt_long
+// accepts any unambiguous prefix).
+const WRAPPER_GETOPT = {
+    env: { value: 'uCSa', long: ['ignore-environment', 'null', 'unset', 'chdir', 'argv0', 'split-string', 'block-signal', 'default-signal', 'ignore-signal', 'list-signal-handling', 'debug'] },
+    timeout: { value: 'sk', long: ['signal', 'kill-after', 'foreground', 'preserve-status', 'verbose'] },
+    nice: { value: 'n', long: ['adjustment'] },
+    stdbuf: { value: 'ioe', long: ['input', 'output', 'error'] },
+    ionice: { value: 'cnpPu', long: ['class', 'classdata', 'pid', 'pgid', 'uid', 'ignore'] },
+    xargs: { value: 'adEILnPs', optional: 'eil', long: ['arg-file', 'delimiter', 'eof', 'replace', 'max-lines', 'max-args', 'max-procs', 'max-chars', 'process-slot-var', 'null', 'open-tty', 'interactive', 'no-run-if-empty', 'verbose', 'exit', 'show-limits'] },
+    exec: { value: 'a', long: [] },
+    time: { value: 'fo', long: ['format', 'output', 'append', 'portability', 'verbose', 'quiet', 'help', 'version'] },
+};
+
+/**
+ * Rewrite a wrapper's leading options into the one-option-per-word, full-name
+ * form the checks below match: `env -iu X` -> `env -i -u X`, `timeout -vk 5`
+ * -> `timeout -v -k 5`, `env --uns X` -> `env --unset X`. Otherwise the value
+ * of a packed or abbreviated option is taken for the command the wrapper runs.
+ */
+function expandWrapperOptions(cmd, w) {
+    const spec = WRAPPER_GETOPT[cmd];
+    if (!spec) return w;
+    const takesValue = WRAPPER_VALUE_OPTS[cmd] ?? [];
+    const out = [w[0]];
+    let k = 1;
+    for (; k < w.length; k++) {
+        const a = w[k];
+        // A lone `-` is env's old spelling of -i; anywhere else it ends the options.
+        if (a === '-' && cmd === 'env') {
+            out.push(a);
+            continue;
+        }
+        if (a === '--' || a === '-' || !a.startsWith('-')) break;
+        if (a.startsWith('--')) {
+            const eq = a.indexOf('=');
+            const name = a.slice(2, eq === -1 ? undefined : eq);
+            const hits = spec.long.filter((l) => l.startsWith(name));
+            const full = `--${spec.long.includes(name) || hits.length !== 1 ? name : hits[0]}`;
+            if (eq !== -1) out.push(full + a.slice(eq));
+            else {
+                out.push(full);
+                if (takesValue.includes(full) && k + 1 < w.length) out.push(w[++k]);
+            }
+            continue;
+        }
+        for (let i = 1; i < a.length; i++) {
+            // `xargs -iE cmd`: E is -i's replace string, not a packed -E.
+            if (spec.optional?.includes(a[i])) {
+                out.push(`-${a[i]}${a.slice(i + 1)}`);
+                break;
+            }
+            if (!spec.value.includes(a[i])) {
+                out.push(`-${a[i]}`);
+            } else if (i + 1 < a.length) {
+                out.push(`-${a[i]}${a.slice(i + 1)}`);
+                break;
+            } else {
+                out.push(`-${a[i]}`);
+                if (k + 1 < w.length) out.push(w[++k]);
+            }
+        }
+    }
+    return [...out, ...w.slice(k)];
+}
 
 /** Index of the command a wrapper (env, timeout, xargs, ...) runs, or -1 if there is none to analyse. */
 function wrapperTarget(w) {
@@ -1665,7 +1736,7 @@ function wrapperTarget(w) {
     let needDuration = cmd === 'timeout';
     for (let k = 1; k < w.length; k++) {
         const a = w[k];
-        if (isAssignment(a) || a === '--') continue;
+        if (isAssignment(a) || a === '--' || (a === '-' && cmd === 'env')) continue;
         if (a.startsWith('-') && a.length > 1) {
             if (valueOpts.includes(a)) k++;
             continue;
@@ -1717,6 +1788,7 @@ function checkSegment(words, state) {
             return block(`Blocked: \`${cmd}\` (privilege escalation) is never run by agents in this repository.`);
         }
         if (!WRAPPERS.has(cmd)) break;
+        w = expandWrapperOptions(cmd, w);
         // `env -S 'gh pr create'` / `--split-string=...` runs a command string.
         // Only env's own leading options and NAME=value words are scanned; the
         // wrapped command's arguments (e.g. `--title -Sx`) are not env options.
@@ -1725,7 +1797,7 @@ function checkSegment(words, state) {
                 const a = w[k];
                 if (isAssignment(a)) continue;
                 if (!a.startsWith('-')) break; // first word of the wrapped command
-                if (['-u', '--unset', '-C', '--chdir'].includes(a)) {
+                if (['-u', '--unset', '-C', '--chdir', '-a', '--argv0'].includes(a)) {
                     if (a === '-C' || a === '--chdir') chdir = true;
                     k++;
                     continue;
