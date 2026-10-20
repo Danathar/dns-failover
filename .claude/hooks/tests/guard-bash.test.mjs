@@ -198,6 +198,14 @@ const allowed = [
     'env -a git git status',
     'exec -a git git status',
     'env - git status',
+    // Packed and abbreviated wrapper options still reach the command they wrap.
+    'timeout -vk 5 10 git status',
+    'env -iu X git status',
+    'env -a X git status',
+    // -a's value is the $0 name, not an env -S command string.
+    "env -a '-Sgit push --force' git status",
+    'nice --adj 5 shellcheck monitor.py',
+    'env -iu X python3 -m pytest',
 ];
 
 const blocked = [
@@ -410,6 +418,33 @@ const blocked = [
     ["env -a X -S'git push --force origin main'", 'force'],
     ['env -iu X git push --force origin main', 'force'],
     ['env --uns X git push --force origin main', 'force'],
+    // --- wrapper options as getopt reads them: a packed (`-iu X`) or
+    // abbreviated (`--uns X`) option's value is not the wrapped command ---
+    ['timeout -vk 5 10 git push --force origin main', 'force'],
+    ['timeout --foreground -vk 5 10 git push --force origin main', 'force'],
+    ['env -iu X gh pr merge 1', 'no --repo'],
+    ['env -iu X GIT_EXTERNAL_DIFF=/tmp/evil git diff HEAD~1 HEAD', 'GIT_EXTERNAL_DIFF'],
+    ["env -vS 'git push --force origin main'", 'force'],
+    // Abbreviated long names are resolved before the -S check.
+    ["env --split='git push --force origin main'", 'force'],
+    ["env --s='git push --force origin main'", 'force'],
+    // env's lone `-` is its old spelling of -i, not the command it runs.
+    ['env -i - gh pr merge 1', 'no --repo'],
+    // env -a (--argv0) takes a value: the name the wrapped command sees as $0.
+    ['env -a X git push --force origin main', 'force'],
+    ['env --argv0 X git push --force origin main', 'force'],
+    ['env --argv X git push --force origin main', 'force'],
+    ['env -ia X gh pr merge 1', 'no --repo'],
+    // A value attached inside a pack ends it: `-aiu` sets $0 to `iu`, `-Cia`
+    // changes to directory `ia`; neither unsets the next word.
+    ['env -aiu git push --force origin main', 'force'],
+    ['env -Cia git push --force origin main', 'force'],
+    // An option's value is one word, even when it looks like a pack of env's
+    // own options: `env -u -iu git` unsets `-iu` and runs git.
+    ['env -u -iu git push --force origin main', 'force'],
+    ['env --unset -iu git push --force origin main', 'force'],
+    // Options after env's lone `-` are still unpacked.
+    ['env - -iu X git push --force origin main', 'force'],
 ];
 
 // ---------------------------------------------------------------------------
@@ -933,6 +968,32 @@ const hostBlocked = [
     ['env - sudo id', 'privilege'],
     ['env - ./install-dns-failover.sh', 'would execute'],
     ['exec -a x ./install-dns-failover.sh', 'would execute'],
+    // --- wrapper options as getopt reads them (see the matching rows in `blocked`) ---
+    ['env -iu X python3 tailscale-dns-failover/monitor.py', 'would execute'],
+    ['env --uns X ./install-dns-failover.sh', 'would execute'],
+    ['timeout -vk 5 10 ./install-dns-failover.sh', 'would execute'],
+    ['timeout --kill 5 10 ./install-dns-failover.sh', 'would execute'],
+    ['ionice -tc 3 ./install-dns-failover.sh', 'would execute'],
+    ['ionice --class 3 ./install-dns-failover.sh', 'would execute'],
+    ['stdbuf --output L ./install-dns-failover.sh', 'would execute'],
+    ['nice --adj 5 ./install-dns-failover.sh', 'would execute'],
+    ['env - python3 configure.py', 'would execute'],
+    ['env -a X python3 configure.py', 'would execute'],
+    ['env -ia X python3 tailscale-dns-failover/monitor.py', 'would execute'],
+    ['env -iu X sudo id', 'privilege'],
+    ['env -i - sudo id', 'privilege'],
+    ['env --argv0 X sudo id', 'privilege'],
+    ['env -iu X systemctl restart dnsmasq', 'systemctl restart'],
+    ['env -iu X curl https://api.tailscale.com/x', 'tailscale.com'],
+    ['timeout -vk 5 10 tailscale set --accept-dns=false', 'tailscale set'],
+    ['env -iu X python3 -m pytest -p evil', '-p'],
+    // A packed or abbreviated -C still moves pytest out of the project.
+    ['env -iC /tmp python3 -m pytest', 'working directory'],
+    ['env --ch /tmp python3 -m pytest', 'working directory'],
+    // xargs -e, -i and -l take an optional value from the rest of the word
+    // only, so `-iE` sets the replace string to `E`; it is not `-i -E sudo`.
+    ['xargs -iE sudo id', 'privilege'],
+    ['xargs -lP ./install-dns-failover.sh', 'xargs'],
 ];
 
 test('pytest is refused when the payload says the shell is outside the project', () => {
