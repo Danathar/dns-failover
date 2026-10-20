@@ -1010,14 +1010,139 @@ test('every refusal carries the repository guidance', () => {
     assert.match(r.stderr, /never run an installer, configure\.py, monitor\.py/);
 });
 
-for (const command of [...allowed, ...hostAllowed]) {
+// --- wrappers outside the original list, and commands run by find -exec ---
+// Ordinary wrappers and find -exec around safe commands.
+const wrapperAllowed = [
+    'time make -j4',
+    'flock lock make -j4',
+    'flock /var/tmp/l git status',
+    'flock -w 5 /var/tmp/l -c "make -j4"',
+    'flock -- lock make -j4',
+    'flock -nw 5 lock make -j4',
+    'flock /tmp/l python3 -m pytest',
+    "find . -name '*.o' -exec ls {} +",
+    "find . -name '*.sh' -exec shellcheck {} +",
+    "find tests -name '*.py' -exec grep -l dnsmasq {} \;",
+    'watch -n1 git status',
+    'watch -tn 1 git status',
+    'taskset -c 0-3 make -j8',
+    'taskset -c 0-3 python3 -m pytest',
+    'taskset -p 1234',
+    'taskset -pc 0-3 1234',
+    'chrt -p 1234',
+    'unshare -r id',
+    'nsenter -t 1 -m -W ls',
+    'exec -a x ls',
+    "fish -c 'git status'",
+    "fish --init-command='set -x A 1' -c 'make -j4'",
+    'fish -d 3 build.fish',
+    'echo function coproc',
+];
+
+// Each of these ran the refused command unchecked before.
+const wrapperBlocked = [
+    ['chrt -f 1 sudo id', 'privilege escalation'],
+    ['chrt 1 sudo id', 'privilege escalation'],
+    ['chrt 10 sudo id', 'privilege escalation'],
+    ['taskset 1 sudo id', 'privilege escalation'],
+    ['taskset -c 0 sudo id', 'privilege escalation'],
+    ['flock /tmp/l sudo id', 'privilege escalation'],
+    ['flock -n /tmp/l sudo id', 'privilege escalation'],
+    ['flock -w 5 /tmp/l sudo id', 'privilege escalation'],
+    ["flock /tmp/l -c 'sudo id'", 'privilege escalation'],
+    ['watch sudo id', 'privilege escalation'],
+    ['watch -n 1 sudo id', 'privilege escalation'],
+    ['watch -n1 sudo id', 'privilege escalation'],
+    ["watch 'sudo id'", 'privilege escalation'],
+    ['watch -x sudo id', 'privilege escalation'],
+    ['unshare sudo id', 'privilege escalation'],
+    ['unshare -r sudo id', 'privilege escalation'],
+    ['unshare -U sudo id', 'privilege escalation'],
+    ['find . -exec sudo id \;', 'privilege escalation'],
+    ['find . -execdir sudo id \;', 'privilege escalation'],
+    ['find . -ok sudo id \;', 'privilege escalation'],
+    ['find . -okdir sudo id \;', 'privilege escalation'],
+    ['find . -execdir sh -c "sudo id" \;', 'privilege escalation'],
+    ['find . -name x -exec ls {} + -exec sudo id \;', 'privilege escalation'],
+    ['nsenter -t 1 sudo id', 'privilege escalation'],
+    ['setpriv --reuid 1000 sudo id', 'privilege escalation'],
+    ['runuser -u root id', 'runuser'],
+    ['runuser -u x -- id', 'privilege escalation'],
+    ['chroot / sudo id', 'privilege escalation'],
+    ['chroot /srv sudo id', 'privilege escalation'],
+    ['busybox sudo id', 'privilege escalation'],
+    ["busybox sh -c 'sudo id'", 'privilege escalation'],
+    ['exec -a x sudo id', 'privilege escalation'],
+    ['coproc sudo id', 'privilege escalation'],
+    ['coproc NAME { sudo id; }', 'privilege escalation'],
+    ['function f { sudo id; }; f', 'privilege escalation'],
+    ['/usr/bin/time -v sudo id', 'privilege escalation'],
+    ['time -p gh issue create -t x', 'no --repo'],
+    ["ksh -c 'sudo id'", 'privilege escalation'],
+    ["systemd-run --user flock /tmp/l -c 'sudo id'", 'privilege escalation'],
+    // The same wrappers in front of this repository's host rules.
+    ['flock /tmp/l ./install-dns-failover.sh', 'would execute an installer'],
+    ['flock /tmp/l -c ./install-dns-failover.sh', 'would execute an installer'],
+    ['watch systemctl restart dnsmasq', 'systemctl restart'],
+    ['watch -n 5 systemctl restart stubby', 'systemctl restart'],
+    ['find . -name x -exec ./tailscale-dns-failover/install.sh \;', 'would execute an installer'],
+    ['taskset -c 0 python3 monitor.py --dry-run', 'would execute an installer'],
+    ['chrt -o 0 bash install-dns-failover.sh', 'would execute an installer'],
+    ['nsenter -t 1 -m systemctl restart dnsmasq', 'systemctl restart'],
+    ['setpriv --reuid 1000 tailscale set --accept-dns=false', 'tailscale set'],
+    ['ksh ./install-dns-failover.sh', 'would execute an installer'],
+    ['flock /tmp/l gh issue create -t x', 'no --repo'],
+    ["watch 'git push --force origin main'", 'force push'],
+    // find -execdir, chroot, nsenter and unshare --wd run the command elsewhere.
+    ['find . -execdir python3 -m pytest \;', 'working directory is not known'],
+    ['chroot / python3 -m pytest', 'working directory is not known'],
+    ['unshare -w /tmp python3 -m pytest', 'working directory is not known'],
+    ["flock /tmp/l -c 'cd /etc && python3 -m pytest'", 'working directory is not known'],
+    // `--` ends a wrapper's options; the next word is its operand or command.
+    ['flock -- -lock gh issue create -t x', 'no --repo'],
+    ['flock -- -lock sudo id', 'privilege escalation'],
+    ['timeout -- 5 gh issue create -t x', 'no --repo'],
+    ['nice -- sudo id', 'privilege escalation'],
+    // fish runs the values of -c/--command and -C/--init-command.
+    ["fish -C 'gh issue create -t x'", 'no --repo'],
+    ["fish --command='gh issue create -t x'", 'no --repo'],
+    ["fish --command 'gh issue create -t x'", 'no --repo'],
+    ["fish --init-command 'gh issue create -t x'", 'no --repo'],
+    ["fish --init-command='sudo id'", 'privilege escalation'],
+    ["fish --comm 'sudo id'", 'privilege escalation'],
+    ["fish -c 'echo ok' -C 'sudo id'", 'privilege escalation'],
+    ["fish -ic 'sudo id'", 'privilege escalation'],
+    ["fish -c'sudo id'", 'privilege escalation'],
+    ["fish -lC 'sudo id' -c 'echo ok'", 'privilege escalation'],
+    // The new wrappers read packed and abbreviated options as getopt does.
+    ['flock -nw 5 /tmp/l sudo id', 'privilege escalation'],
+    ['flock --tim 5 /tmp/l sudo id', 'privilege escalation'],
+    ['flock --start 0 /tmp/l sudo id', 'privilege escalation'],
+    ['watch -tn 1 sudo id', 'privilege escalation'],
+    ['watch --int 1 sudo id', 'privilege escalation'],
+    ['watch --eq 1 sudo id', 'privilege escalation'],
+    ['chrt -vT 5 0 sudo id', 'privilege escalation'],
+    ['unshare -rS 0 sudo id', 'privilege escalation'],
+    ['unshare --setu 0 sudo id', 'privilege escalation'],
+    ['unshare -l X sudo id', 'privilege escalation'],
+    ['unshare --owner 0:0 sudo id', 'privilege escalation'],
+    ['nsenter -at 1 sudo id', 'privilege escalation'],
+    ['nsenter --tar 1 sudo id', 'privilege escalation'],
+    ['setpriv --ptracer any sudo id', 'privilege escalation'],
+    ['chroot --user 0 / sudo id', 'privilege escalation'],
+    // nsenter's -W value is optional: the next word is the command, not the value.
+    ['nsenter -t 1 -m -W sudo id', 'privilege escalation'],
+    ['nsenter -t 1 -m --wdns sudo id', 'privilege escalation'],
+];
+
+for (const command of [...allowed, ...hostAllowed, ...wrapperAllowed]) {
     test(`allows: ${command.replace(/\n/g, '\\n')}`, () => {
         const r = run(command);
         assert.equal(r.status, 0, `expected allow, got ${r.status}: ${r.stderr}`);
     });
 }
 
-for (const [command, fragment] of [...blocked, ...hostBlocked]) {
+for (const [command, fragment] of [...blocked, ...hostBlocked, ...wrapperBlocked]) {
     test(`blocks: ${command.replace(/\n/g, '\\n')}`, () => {
         const r = run(command);
         assert.equal(r.status, 2, `expected block, got ${r.status}`);

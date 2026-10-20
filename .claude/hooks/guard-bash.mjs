@@ -73,8 +73,9 @@
 //   - Executing install-dns-failover.sh, tailscale-dns-failover/install.sh,
 //     tests/e2e/in-container.sh (it runs the installers), configure.py or
 //     monitor.py (any arguments, including --dry-run): directly, via
-//     bash/sh/zsh/dash, source, `.`, python, env/timeout/xargs/other
-//     wrappers, systemd-run, or via `distrobox enter` / `toolbox run`. The
+//     bash/sh/zsh/dash/ksh/fish/..., source, `.`, python,
+//     env/timeout/xargs/flock/watch/other wrappers, `find -exec`,
+//     systemd-run, or via `distrobox enter` / `toolbox run`. The
 //     only exemption is the e2e harness: `podman run ...` / `docker run ...`
 //     with a `tests/e2e` path (the scripts then run inside a throwaway
 //     container).
@@ -86,8 +87,8 @@
 //     options are accepted, spelled in full: argparse would otherwise accept
 //     abbreviations (`--dir`, `--no-rel`) this hook cannot match. Relative or
 //     expanding paths ($, `, ~, .., globs) never qualify.
-//   - sudo / doas / pkexec / run0 / su in any position of a wrapper chain,
-//     including behind systemd-run and flatpak-spawn.
+//   - sudo / doas / pkexec / run0 / su / runuser in any position of a wrapper
+//     chain, including behind systemd-run, flatpak-spawn and `find -exec`.
 //   - systemctl subcommands that change state (start, stop, restart, reload,
 //     enable, disable, mask, kill, daemon-reload, edit, link, ...) unless the
 //     call is plainly `--user` and names none of dnsmasq, stubby or this
@@ -110,14 +111,20 @@
 // or python with no script operand that reads a protected script on stdin
 // (`cat install-dns-failover.sh | sh`, `bash -s < install.sh`,
 // `bash -c "$(cat install.sh)"`) counts as running it. Quoted heredoc bodies
-// are data. Wrappers (env, timeout, xargs, ...) are looked through to the
-// command they run, not to a later argument. Deliberate obfuscation
-// (variables, built strings, scripts written then run) stays out of scope.
+// are data. Wrappers (env, timeout, xargs, time, flock, watch, taskset, chrt,
+// unshare, nsenter, setpriv, chroot, busybox, exec -a, ...) are looked through
+// to the command they run, not to a later argument; so are
+// `find -exec|-execdir|-ok|-okdir CMD ... ;`, the body after `function NAME`
+// and the command after `coproc`. The wrapper list is closed: a wrapper
+// outside it hides its command. Wrapper options are read as getopt reads
+// them, so a packed (`env -iu X`) or abbreviated (`env --uns X`) option's
+// value is not taken for the command. Deliberate obfuscation (variables,
+// built strings, scripts written then run) stays out of scope.
 //
 // Read-only gh commands (view, list, status, diff, checks, api GET, ...) are
 // always allowed. The command is split into segments on && || ; | & newlines,
-// subshells and command substitutions; shell -c / eval strings are analysed
-// recursively. Quoted text is data, so a quoted "sudo" or script name inside
+// subshells and command substitutions; shell -c, eval, watch and
+// `flock FILE -c` strings are analysed recursively. Quoted text is data, so a quoted "sudo" or script name inside
 // an `echo` or a read-only command is fine.
 
 import { basename, dirname, join, isAbsolute, resolve } from 'node:path';
@@ -183,8 +190,9 @@ const KEYWORDS = new Set(['{', '}', '!', 'if', 'then', 'else', 'elif', 'do', 'wh
 const WRAPPERS = new Set([
     'env', 'command', 'builtin', 'exec', 'nohup', 'sudo', 'nice', 'xargs',
     'timeout', 'setsid', 'stdbuf', 'ionice', 'chronic', 'time',
+    'flock', 'watch', 'taskset', 'chrt', 'unshare', 'nsenter', 'setpriv', 'chroot', 'busybox',
 ]);
-const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash']);
+const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'mksh', 'ash', 'yash', 'posh', 'fish', 'csh', 'tcsh']);
 
 // ---------------------------------------------------------------------------
 // Tokenizer
@@ -1248,7 +1256,7 @@ function checkPython(cmd, args, env, words, state) {
 // Host-modifying commands
 // ---------------------------------------------------------------------------
 
-const PRIVILEGE = new Set(['sudo', 'doas', 'pkexec', 'run0', 'su']);
+const PRIVILEGE = new Set(['sudo', 'doas', 'pkexec', 'run0', 'su', 'runuser']);
 const CONTAINER_ENTER = new Set(['distrobox', 'distrobox-enter', 'distrobox-host-exec', 'toolbox']);
 const CONTAINER_ENGINES = new Set(['podman', 'docker', 'nerdctl']);
 const NET_CLIENTS = new Set(['curl', 'wget', 'http', 'https', 'xh', 'xhs', 'aria2c']);
@@ -1649,7 +1657,8 @@ function hostMountRefusal(args, state) {
 // Segment / command analysis
 // ---------------------------------------------------------------------------
 
-// Options of wrapper commands that take a separate value word.
+// Options of wrapper commands that take a separate value word. Only options
+// with a required value belong here: listing a flag would skip the command word.
 const WRAPPER_VALUE_OPTS = {
     timeout: ['-s', '--signal', '-k', '--kill-after'],
     nice: ['-n', '--adjustment'],
@@ -1659,6 +1668,30 @@ const WRAPPER_VALUE_OPTS = {
     env: ['-u', '--unset', '-C', '--chdir', '-a', '--argv0'],
     exec: ['-a'],
     time: ['-f', '--format', '-o', '--output'],
+    flock: ['-w', '--timeout', '--wait', '-E', '--conflict-exit-code', '--start', '--length'],
+    watch: ['-n', '--interval', '-q', '--equexit', '--eqexit', '-s', '--shotsdir'],
+    chrt: ['-T', '--sched-runtime', '-P', '--sched-period', '-D', '--sched-deadline'],
+    unshare: [
+        '-S', '--setuid', '-G', '--setgid', '-R', '--root', '-w', '--wd', '-l', '--load-interp', '--owner', '--propagation',
+        '--setgroups', '--monotonic', '--boottime', '--map-user', '--map-group', '--map-users', '--map-groups',
+    ],
+    // nsenter's -W/--wdns value is optional (`-W/path`, `--wdns=/path`), so the next word is never it.
+    nsenter: ['-t', '--target', '-S', '--setuid', '-G', '--setgid', '-N', '--net-socket'],
+    setpriv: [
+        '--ambient-caps', '--inh-caps', '--bounding-set', '--ruid', '--euid', '--rgid', '--egid', '--reuid', '--regid',
+        '--groups', '--securebits', '--pdeathsig', '--selinux-label', '--apparmor-profile', '--landlock-access',
+        '--landlock-rule', '--seccomp-filter', '--ptracer',
+    ],
+    chroot: ['--userspec', '--groups'],
+};
+// Operand words a wrapper takes before the command: timeout's duration,
+// taskset's CPU mask, flock's lock file, chroot's new root.
+const WRAPPER_OPERANDS = { timeout: 1, taskset: 1, flock: 1, chroot: 1 };
+// Options that make taskset/chrt act on a running process (-p) or only print
+// (chrt -m): the words after them are not a command.
+const NO_COMMAND_OPTS = {
+    taskset: /^(?:--pid$|-[a-zA-Z]*p)/,
+    chrt: /^(?:--pid$|--max$|-[a-zA-Z]*[pm])/,
 };
 
 // Each wrapper's options as getopt reads them: the short letters that take a
@@ -1674,6 +1707,46 @@ const WRAPPER_GETOPT = {
     xargs: { value: 'adEILnPs', optional: 'eil', long: ['arg-file', 'delimiter', 'eof', 'replace', 'max-lines', 'max-args', 'max-procs', 'max-chars', 'process-slot-var', 'null', 'open-tty', 'interactive', 'no-run-if-empty', 'verbose', 'exit', 'show-limits'] },
     exec: { value: 'a', long: [] },
     time: { value: 'fo', long: ['format', 'output', 'append', 'portability', 'verbose', 'quiet', 'help', 'version'] },
+    // util-linux, procps and coreutils option tables.
+    flock: {
+        value: 'wE',
+        long: ['shared', 'exclusive', 'unlock', 'nonblocking', 'nb', 'timeout', 'wait', 'conflict-exit-code', 'close', 'no-fork', 'verbose', 'fcntl', 'start', 'length', 'help', 'version'],
+    },
+    watch: {
+        value: 'nqs',
+        optional: 'd',
+        long: ['color', 'no-color', 'differences', 'help', 'interval', 'beep', 'errexit', 'follow', 'chgexit', 'equexit', 'exec', 'precise', 'no-rerun', 'shotsdir', 'no-title', 'no-wrap', 'version'],
+    },
+    chrt: {
+        value: 'DPT',
+        long: ['all-tasks', 'batch', 'deadline', 'ext', 'fifo', 'idle', 'pid', 'help', 'max', 'other', 'rr', 'sched-runtime', 'sched-period', 'sched-deadline', 'reset-on-fork', 'verbose', 'version'],
+    },
+    taskset: { value: '', long: ['all-tasks', 'pid', 'cpu-list', 'help', 'version'] },
+    unshare: {
+        value: 'RwSGl',
+        long: [
+            'help', 'version', 'mount', 'uts', 'ipc', 'net', 'pid', 'user', 'cgroup', 'time', 'fork', 'kill-child', 'forward-signals', 'mount-proc',
+            'mount-binfmt', 'map-user', 'map-users', 'map-group', 'map-groups', 'map-root-user', 'map-current-user', 'map-auto', 'map-subids',
+            'owner', 'propagation', 'setgroups', 'keep-caps', 'monotonic', 'boottime', 'load-interp', 'setuid', 'setgid', 'root', 'wd',
+        ],
+    },
+    nsenter: {
+        value: 'tNSG',
+        optional: 'muinpCUTrwW',
+        long: [
+            'all', 'help', 'version', 'target', 'mount', 'uts', 'ipc', 'net', 'net-socket', 'pid', 'user', 'cgroup', 'time', 'setuid', 'setgid',
+            'root', 'wd', 'wdns', 'env', 'no-fork', 'join-cgroup', 'preserve-credentials', 'keep-caps', 'user-parent', 'follow-context',
+        ],
+    },
+    setpriv: {
+        value: '',
+        long: [
+            'dump', 'nnp', 'no-new-privs', 'inh-caps', 'ambient-caps', 'list-caps', 'ruid', 'euid', 'rgid', 'egid', 'reuid', 'regid', 'clear-groups',
+            'keep-groups', 'init-groups', 'groups', 'bounding-set', 'securebits', 'pdeathsig', 'ptracer', 'selinux-label', 'apparmor-profile',
+            'landlock-access', 'landlock-rule', 'seccomp-filter', 'help', 'reset-env', 'version',
+        ],
+    },
+    chroot: { value: '', long: ['groups', 'userspec', 'skip-chdir', 'help', 'version'] },
 };
 
 /**
@@ -1733,21 +1806,96 @@ function wrapperTarget(w) {
     const cmd = basename(w[0]);
     if (cmd === 'command' && w.some((a) => /^-[a-zA-Z]*[vV]/.test(a))) return -1; // lookup only
     const valueOpts = WRAPPER_VALUE_OPTS[cmd] ?? [];
-    let needDuration = cmd === 'timeout';
+    let operands = WRAPPER_OPERANDS[cmd] ?? 0;
+    let priority = cmd === 'chrt'; // chrt's scheduling priority may be left out
+    // After `--` every word is an operand or the command, even one starting with `-`
+    // (`flock -- -lock CMD`: -lock is the lock file).
+    let options = true;
     for (let k = 1; k < w.length; k++) {
         const a = w[k];
-        if (isAssignment(a) || a === '--' || (a === '-' && cmd === 'env')) continue;
-        if (a.startsWith('-') && a.length > 1) {
+        // flock reads no options after its lock file: `flock FILE -c CMD` is its command form.
+        if (cmd === 'flock' && operands === 0) return k;
+        if (isAssignment(a) || (a === '-' && cmd === 'env')) continue;
+        if (options && a === '--') {
+            options = false;
+            continue;
+        }
+        if (options && a.startsWith('-') && a.length > 1) {
+            if (NO_COMMAND_OPTS[cmd]?.test(a)) return -1;
             if (valueOpts.includes(a)) k++;
             continue;
         }
-        if (needDuration) {
-            needDuration = false;
+        if (operands > 0) {
+            operands--;
+            continue;
+        }
+        if (priority && /^\d+$/.test(a)) {
+            priority = false;
             continue;
         }
         return k;
     }
     return -1;
+}
+
+/**
+ * `find ... -exec|-execdir|-ok|-okdir CMD ARGS ;` (or `{} +`) runs CMD for each
+ * file: analyse each such command like a segment of its own. -execdir and
+ * -okdir run it from the directory of each file, so its directory is unknown.
+ */
+function checkFindExec(args, state) {
+    for (let i = 0; i < args.length; i++) {
+        if (!['-exec', '-execdir', '-ok', '-okdir'].includes(args[i])) continue;
+        let end = i + 1;
+        while (end < args.length && args[end] !== ';' && !(args[end] === '+' && args[end - 1] === '{}')) end++;
+        const st = Object.assign(Object.create(state), args[i].endsWith('dir') ? { cwd: null } : {});
+        const r = checkSegment(args.slice(i + 1, end), st);
+        if (r) return r;
+        i = end;
+    }
+    return null;
+}
+
+// fish's long options (getopt accepts any unambiguous prefix) and the ones taking a value.
+const FISH_LONG = [
+    'command', 'debug', 'debug-output', 'debug-stack-frames', 'features', 'help', 'init-command', 'interactive', 'login',
+    'no-config', 'no-execute', 'print-debug-categories', 'print-rusage-self', 'private', 'profile', 'profile-startup', 'version',
+];
+const FISH_LONG_VALUE = new Set(['command', 'init-command', 'debug', 'debug-output', 'debug-stack-frames', 'features', 'profile', 'profile-startup']);
+// fish's short options taking a value: the rest of the word, or else the next word.
+const FISH_SHORT_VALUE = 'cCdDfop';
+
+/**
+ * Every code string a fish invocation runs: the values of -c/--command and
+ * -C/--init-command, attached (`-cCMD`, `--command=CMD`) or in the next word,
+ * in a short cluster (`-ic CMD`) or behind an abbreviated long name (`--comm`).
+ * Words that are not options are skipped rather than ending the scan, so an
+ * option after a script name is still inspected.
+ */
+function fishScripts(args) {
+    const scripts = [];
+    for (let k = 0; k < args.length; k++) {
+        const a = args[k];
+        if (a === '--') break;
+        if (!a.startsWith('-') || a === '-') continue;
+        if (a.startsWith('--')) {
+            const eq = a.indexOf('=');
+            const name = a.slice(2, eq === -1 ? undefined : eq);
+            const hits = FISH_LONG.filter((o) => o.startsWith(name));
+            const opt = hits.includes(name) ? name : hits.length === 1 ? hits[0] : null;
+            if (!FISH_LONG_VALUE.has(opt)) continue;
+            const value = eq === -1 ? args[++k] : a.slice(eq + 1);
+            if ((opt === 'command' || opt === 'init-command') && value !== undefined) scripts.push(value);
+            continue;
+        }
+        for (let j = 1; j < a.length; j++) {
+            if (!FISH_SHORT_VALUE.includes(a[j])) continue;
+            const value = j + 1 < a.length ? a.slice(j + 1) : args[++k];
+            if ((a[j] === 'c' || a[j] === 'C') && value !== undefined) scripts.push(value);
+            break;
+        }
+    }
+    return scripts;
 }
 
 /** Where `cd DIR` leaves the shell: DIR if it is plainly inside the project, else null (unknown). */
@@ -1775,11 +1923,14 @@ function checkSegment(words, state) {
     // run time, so no argument check below sees the real command line.
     let xargsFed = false;
     for (;;) {
-        while (w.length && (isAssignment(w[0]) || KEYWORDS.has(w[0]))) {
+        while (w.length && (isAssignment(w[0]) || KEYWORDS.has(w[0]) || w[0] === 'function' || w[0] === 'coproc')) {
             if (isAssignment(w[0])) {
                 const eq = w[0].indexOf('=');
                 inlineEnv[w[0].slice(0, eq)] = w[0].slice(eq + 1);
             }
+            // `function NAME { CMD; }`: the body follows the name. `coproc NAME { CMD; }`
+            // names a compound command; `coproc CMD` runs CMD.
+            if (w[0] === 'function' || (w[0] === 'coproc' && w[2] === '{')) w.shift();
             w.shift();
         }
         if (!w.length) return null;
@@ -1820,7 +1971,7 @@ function checkSegment(words, state) {
             }
         }
         // Look through the wrapper to the command it runs: skip its own options
-        // (and their values), NAME=value words, and timeout's duration.
+        // (and their values), NAME=value words, and operands such as timeout's duration.
         const idx = wrapperTarget(w);
         for (const x of w.slice(1, idx === -1 ? w.length : idx)) {
             if (isAssignment(x)) {
@@ -1829,6 +1980,20 @@ function checkSegment(words, state) {
             }
         }
         if (idx === -1) return null;
+        // chroot changes to its new root, nsenter can enter another mount namespace
+        // or working directory, and unshare -w/--wd/-R/--root moves too.
+        if (cmd === 'chroot' || cmd === 'nsenter') chdir = true;
+        if (cmd === 'unshare' && w.slice(1, idx).some((a) => /^(?:-[wR]|--wd|--root)(?:=|$)|^-[wR]./.test(a))) chdir = true;
+        // `watch CMD...` joins its words and runs them with `sh -c` (with -x it runs
+        // them directly; the words are also looked through below, so both readings
+        // are checked). `flock FILE -c CMD` runs CMD with `sh -c`.
+        const inner = () => Object.assign(Object.create(state), chdir ? { cwd: null } : {});
+        if (cmd === 'watch') {
+            const r = checkCommand(w.slice(idx).join(' '), inner());
+            if (r) return r;
+        } else if (cmd === 'flock' && (w[idx] === '-c' || w[idx] === '--command')) {
+            return checkCommand(w[idx + 1] ?? '', inner());
+        }
         if (cmd === 'xargs') xargsFed = true;
         w = w.slice(idx);
     }
@@ -1885,6 +2050,7 @@ function checkSegment(words, state) {
     if (cmd === 'source' || cmd === '.') {
         return args.some(isProtected) ? blockProtected(`Sourcing ${args.find(isProtected)}`) : null;
     }
+    if (cmd === 'find') return checkFindExec(args, here);
     if (SHELLS.has(cmd)) {
         // `bash -n` is pre-approved in .claude/settings.json because -n parses a
         // script without running it, but a later `+n` or `+o noexec` turns -n off
@@ -1901,16 +2067,26 @@ function checkSegment(words, state) {
                 );
             }
         }
-        const c = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
-        // The script is the first non-option word after -c (`sh -c -- 'cmd'`, `sh -c -x 'cmd'`).
-        const script = c === -1 ? undefined : args.slice(c + 1).find((a) => !a.startsWith('-'));
-        if (script !== undefined) {
+        // fish takes code from -c/--command and -C/--init-command (each may repeat,
+        // with the value attached or in the next word); every one of them runs.
+        // Other shells run the first non-option word after -c
+        // (`sh -c -- 'cmd'`, `sh -c -x 'cmd'`).
+        let scripts;
+        if (cmd === 'fish') scripts = fishScripts(args);
+        else {
+            const c = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
+            const script = c === -1 ? undefined : args.slice(c + 1).find((a) => !a.startsWith('-'));
+            scripts = script === undefined ? [] : [script];
+        }
+        for (const script of scripts) {
             // `bash -c "$(cat install.sh)"`: the whole script text is the installer.
             if (/^\$\([\s\S]*\)$|^`[\s\S]*`$/.test(script.trim()) && extractSubstitutions(script).some(readsProtected)) {
                 return blockProtected(`\`${cmd} -c\` reading a protected script`);
             }
-            return checkCommand(script, nested());
+            const r = checkCommand(script, nested());
+            if (r) return r;
         }
+        if (scripts.length) return null;
         // `bash -n file` only parses the file; any other shell invocation runs it.
         const syntaxOnly = args.some((a) => /^-[a-zA-Z]*n[a-zA-Z]*$/.test(a));
         const target = args.find(isProtected);
@@ -1954,7 +2130,7 @@ function checkSegment(words, state) {
         const isInteresting = (a) =>
             isProtected(a) || PRIVILEGE.has(basename(a)) || ['gh', 'git', 'node', 'nodejs', 'eval', 'source', 'coverage',
                 'systemctl', 'service', 'dnsmasq', 'stubby', 'tailscale', 'tailscaled', 'pkill', 'killall', 'systemd-run',
-                'flatpak-spawn', ...SHELLS, ...CONTAINER_ENTER, ...CONTAINER_ENGINES, ...NET_CLIENTS].includes(basename(a)) ||
+                'flatpak-spawn', 'watch', 'flock', 'find', ...SHELLS, ...CONTAINER_ENTER, ...CONTAINER_ENGINES, ...NET_CLIENTS].includes(basename(a)) ||
             isPython(basename(a)) || isPytest(basename(a));
         const at = args.findIndex(isInteresting);
         if (at !== -1) {
