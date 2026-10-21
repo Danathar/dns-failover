@@ -193,6 +193,42 @@ const WRAPPERS = new Set([
     'flock', 'watch', 'taskset', 'chrt', 'unshare', 'nsenter', 'setpriv', 'chroot', 'busybox',
 ]);
 const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'mksh', 'ash', 'yash', 'posh', 'fish', 'csh', 'tcsh']);
+// No list of programs that run a command is complete: `setarch x86_64 git
+// diff`, `prlimit` and `strace -o log` run the words after them, and
+// `script -qc '...'` hands a shell one string. Behind any program this hook
+// neither checks nor steps over, the checked command it would run is checked
+// as a command of its own; see checkUnlistedProgram(). These print, match or
+// look up their arguments and never run them, so they are not read at all,
+// which keeps `grep -rn 'git diff --no-index' docs` and `which sudo` working.
+// Only the bare spelling counts, and leaving a program out can only over-refuse.
+const ARGUMENT_ONLY_PROGRAMS = new Set(['echo', 'printf', 'grep', 'egrep', 'fgrep', 'which', 'whereis']);
+// Each checked command behind such a program is checked from where it starts
+// to the end of the segment, so the work grows with the square of the words.
+// Past this many the command is refused unread; no real invocation runs that many.
+const MAX_UNLISTED_INNER = 8;
+// What separates the words of a command string a program hands to a shell:
+// whitespace, the shell's own punctuation and quotes. Splitting on all of them
+// reads more words than the shell would, which can only over-refuse.
+const COMMAND_STRING_SEPARATORS = /[\s;&|()<>`'"]+/;
+// How long one decision may take. Claude Code runs the command when the hook
+// times out or dies, and reading every tail of a short-option cluster grows
+// with the square of the word. A command still being read past this is
+// refused instead; see spend().
+export const BUDGET_MS = 5000;
+let deadline = null;
+
+/** Thrown once a decision has run past BUDGET_MS; main() refuses with it. */
+class OverBudget extends Error {}
+
+function spend() {
+    if (deadline !== null && Date.now() > deadline) {
+        throw new OverBudget(
+            `Blocked: this hook could not finish checking the command within ${BUDGET_MS / 1000} seconds, and ` +
+                'Claude Code runs a command whose hook times out, so it is refused rather than left half-read. ' +
+                'Split it into shorter commands.'
+        );
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Tokenizer
@@ -1915,7 +1951,97 @@ function cdTarget(args, state) {
     return insideOrEqual(real, projectRoot()) ? dir : null;
 }
 
+const DAEMON_NAMES = new Set(['dnsmasq', 'stubby', 'tailscaled']);
+
+/** Whether this word names a command checkSegment() checks or looks through. */
+function namesCheckedOrDaemon(a) {
+    const name = basename(a);
+    return (
+        PRIVILEGE.has(name) ||
+        ['gh', 'git', 'node', 'nodejs', 'eval', 'source', 'coverage', 'systemctl', 'service', 'dnsmasq', 'stubby',
+            'tailscale', 'tailscaled', 'pkill', 'killall', 'systemd-run', 'flatpak-spawn', 'watch', 'flock', 'find',
+            ...SHELLS, ...CONTAINER_ENTER, ...CONTAINER_ENGINES, ...NET_CLIENTS].includes(name) ||
+        isPython(name) ||
+        isPytest(name)
+    );
+}
+
+/**
+ * The command strings a word may hand to a shell: the word itself when it
+ * holds more than one word of its own (`script -c 'git diff ...'`), or a value
+ * attached to an option in the same word: after the `=` of a long option, or
+ * after any letter of a short-option cluster (`script -qc'git diff ...'`).
+ * Which letter takes a value is not modelled, so every one is tried. Yielded
+ * one at a time: a long cluster has as many tails as letters, each nearly as
+ * long as the word.
+ */
+function* commandStrings(word) {
+    if (COMMAND_STRING_SEPARATORS.test(word)) yield word;
+    if (word.startsWith('--')) {
+        const eq = word.indexOf('=');
+        if (eq !== -1) yield word.slice(eq + 1);
+    } else {
+        const cluster = /^-[A-Za-z0-9]+/.exec(word);
+        if (cluster) for (let cut = 2; cut <= cluster[0].length; cut++) yield word.slice(cut);
+    }
+}
+
+/**
+ * For a segment whose command is a program this hook neither checks nor steps
+ * over (`setarch x86_64 git diff ...`, `prlimit ...`, `script -qc '...'`), the
+ * refusal for the checked command it would run, or null. Each later word that
+ * names a checked command is checked from there to the end, with the
+ * assignments in front of the program, and each command string a later word
+ * carries is checked as a command line of its own. A command that passes alone
+ * still passes behind any program. Only over-refusing is guessed at: an option
+ * value that reads as a checked command (`uname -- git diff --no-index a b`)
+ * is refused too. A protected script named behind such a program is not read:
+ * the hook cannot tell `cat install.sh` from a program that runs it.
+ */
+function checkUnlistedProgram(w, inlineEnv, state) {
+    const cmd = w[0];
+    if (ARGUMENT_ONLY_PROGRAMS.has(cmd)) return null;
+    // The daemon names are what `pgrep -a dnsmasq` and `journalctl -u stubby`
+    // look up, so as a later word they are not read as a command.
+    const namesCheckedCommand = (a) => !DAEMON_NAMES.has(basename(a)) && namesCheckedOrDaemon(a);
+    const env = Object.entries(inlineEnv).map(([name, value]) => `${name}=${value}`);
+    let checked = 0;
+    for (let n = 1; n < w.length; n++) {
+        spend();
+        let refusal = null;
+        if (namesCheckedCommand(w[n])) {
+            if (++checked > MAX_UNLISTED_INNER) {
+                return block(
+                    `Blocked: more than ${MAX_UNLISTED_INNER} commands this hook checks behind \`${basename(cmd)}\`, ` +
+                        'too many to read. Run them as commands of their own.'
+                );
+            }
+            let start = n;
+            while (start > 1 && isAssignment(w[start - 1])) start--;
+            refusal = checkSegment([...env, ...w.slice(start)], Object.create(state));
+        }
+        if (!refusal) {
+            for (const text of commandStrings(w[n])) {
+                spend();
+                if (!text.split(COMMAND_STRING_SEPARATORS).some((piece) => piece && namesCheckedCommand(piece))) continue;
+                refusal = checkCommand(text, Object.create(state));
+                if (refusal) break;
+            }
+        }
+        if (refusal) {
+            return {
+                ...refusal,
+                reason:
+                    `\`${basename(cmd)}\` runs a command that is refused on its own, and bypass and auto modes ` +
+                    `prompt for neither, so it is checked as though it stood alone. ${refusal.reason}`,
+            };
+        }
+    }
+    return null;
+}
+
 function checkSegment(words, state) {
+    spend();
     const { pipedFrom, stdinFrom, hereString, heredocBody } = words;
     let w = words.slice();
     const inlineEnv = {};
@@ -2129,11 +2255,7 @@ function checkSegment(words, state) {
     if (NET_CLIENTS.has(cmd)) return checkNetClient(cmd, args);
     if (cmd === 'systemd-run' || cmd === 'flatpak-spawn') {
         // They run a command outside this shell's cwd: look through to it.
-        const isInteresting = (a) =>
-            isProtected(a) || PRIVILEGE.has(basename(a)) || ['gh', 'git', 'node', 'nodejs', 'eval', 'source', 'coverage',
-                'systemctl', 'service', 'dnsmasq', 'stubby', 'tailscale', 'tailscaled', 'pkill', 'killall', 'systemd-run',
-                'flatpak-spawn', 'watch', 'flock', 'find', ...SHELLS, ...CONTAINER_ENTER, ...CONTAINER_ENGINES, ...NET_CLIENTS].includes(basename(a)) ||
-            isPython(basename(a)) || isPytest(basename(a));
+        const isInteresting = (a) => isProtected(a) || namesCheckedOrDaemon(a);
         const at = args.findIndex(isInteresting);
         if (at !== -1) {
             const r = checkSegment(args.slice(at), Object.assign(Object.create(state), { cwd: null }));
@@ -2167,7 +2289,7 @@ function checkSegment(words, state) {
         }
         return null;
     }
-    return null;
+    return checkUnlistedProgram(w, inlineEnv, state);
 }
 
 
@@ -2188,7 +2310,7 @@ export function checkCommand(command, state = {}) {
 // Entry point
 // ---------------------------------------------------------------------------
 
-export function main(check = checkCommand) {
+export function main(check = checkCommand, budgetMs = BUDGET_MS) {
     // Claude Code blocks only on exit 2; any other failure (an uncaught
     // exception exits 1) lets the command run. So nothing may escape this function.
     try {
@@ -2203,12 +2325,17 @@ export function main(check = checkCommand) {
         const command = payload?.tool_input?.command;
         if (typeof command !== 'string' || !command.trim()) process.exit(0);
 
+        deadline = Date.now() + budgetMs;
         const result = check(command, typeof payload?.cwd === 'string' ? { cwd: payload.cwd } : {});
         if (result) {
             process.stderr.write(`guard-bash: ${result.reason}\n`);
             process.exit(2);
         }
     } catch (err) {
+        if (err instanceof OverBudget) {
+            process.stderr.write(`guard-bash: ${err.message}\n${GUIDANCE}\n`);
+            process.exit(2);
+        }
         process.stderr.write(`guard-bash: internal error (${err?.message ?? err}); blocking (fail closed).\n`);
         process.exit(2);
     }

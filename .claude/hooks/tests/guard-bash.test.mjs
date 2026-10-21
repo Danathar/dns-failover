@@ -1037,6 +1037,15 @@ const wrapperAllowed = [
     "fish --init-command='set -x A 1' -c 'make -j4'",
     'fish -d 3 build.fish',
     'echo function coproc',
+    // Behind a program this hook does not list, a command that passes alone
+    // still passes, and lookups of the daemons' names are not read (#118).
+    'setarch x86_64 git status',
+    'setarch x86_64 python3 -m pytest',
+    'pgrep -a dnsmasq',
+    'journalctl -u stubby',
+    'which sudo',
+    'man git',
+    "grep -rn 'git push --force' docs",
 ];
 
 // Each of these ran the refused command unchecked before.
@@ -1138,6 +1147,20 @@ const wrapperBlocked = [
     // nsenter's -W value is optional: the next word is the command, not the value.
     ['nsenter -t 1 -m -W sudo id', 'privilege escalation'],
     ['nsenter -t 1 -m --wdns sudo id', 'privilege escalation'],
+    // Any other program that runs the words after it, or hands a shell one
+    // string, is read the same way: what it would run is checked as though it
+    // stood alone (#118).
+    ['setarch x86_64 git diff --no-index /dev/null .env', '`setarch` runs a command'],
+    ['prlimit git diff --no-index /dev/null .env', '`prlimit` runs a command'],
+    ['strace -o log git diff --no-index /dev/null .env', '`strace` runs a command'],
+    ['setarch x86_64 git push --force origin main', '`setarch` runs a command'],
+    ['setarch x86_64 python3 -m pytest -p evil', '`setarch` runs a command'],
+    ['setarch x86_64 gh pr create --title t', '`setarch` runs a command'],
+    ['setarch x86_64 sudo id', 'privilege escalation'],
+    ['GIT_EXTERNAL_DIFF=x setarch x86_64 git diff', '`setarch` runs a command'],
+    ['script -qc "git diff --no-index /dev/null .env" /dev/null', '`script` runs a command'],
+    ["script -qc'git push --force origin main' /dev/null", '`script` runs a command'],
+    [`setarch x86_64 ${'git status '.repeat(9)}`, 'more than 8 commands'],
 ];
 
 for (const command of [...allowed, ...hostAllowed, ...wrapperAllowed]) {
@@ -1182,6 +1205,17 @@ test('still blocks when the hook is invoked through a symlinked path', () => {
     const input = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'sudo true' } });
     const r = spawnSync(process.execPath, [link], { input, encoding: 'utf8', env: { ...process.env, CLAUDE_PROJECT_DIR: PROJECT } });
     assert.equal(r.status, 2, r.stderr);
+});
+
+test('a command still being read past the budget is refused, not left to the hook timeout (#118)', () => {
+    // Every tail of a long short-option cluster is read, which grows with the
+    // square of the word, and Claude Code runs the command when the hook times out.
+    const code = `import { main } from ${JSON.stringify(HOOK)}; main(undefined, 1);`;
+    const command = `true -${'a'.repeat(20000)}cgit log`;
+    const input = JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { input, encoding: 'utf8' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /could not finish checking the command within/);
 });
 
 test('an internal error fails closed (exit 2), not open', () => {
