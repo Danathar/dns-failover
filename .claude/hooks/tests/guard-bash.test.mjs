@@ -1047,6 +1047,29 @@ const wrapperAllowed = [
     'man git',
     "grep -rn 'git push --force' docs",
     "script -qc 'g\"\"it status' /dev/null",
+    // A name read the way the shell reads it passes as it would spelled out,
+    // and braces and wildcards that build no checked name are left alone (#124).
+    "$'git' status",
+    '$"git" log --oneline -1',
+    '/usr/bin/g?t status',
+    'setarch x86_64 /usr/bin/g?t status',
+    "setarch x86_64 $'git' status",
+    'git status',
+    'ls /usr/bin/g*',
+    'setarch x86_64 ls /usr/bin/g*',
+    "sh -c 'ls /usr/bin/g?t'",
+    'ls tests/*',
+    'wc -l tests/* scripts/*',
+    'cat {a,b}.txt',
+    'mkdir -p /var/tmp/dnsf-{a,b}',
+    "sh -c 'cp {a,b}.py /var/tmp'",
+    "script -qc 'cat {a,b}.txt' /dev/null",
+    "find . -name '*' -print",
+    "awk -F: '$1 == \"root\" {print $7}' /etc/passwd",
+    "awk '{ if ($1 > 0) print $2 }' x",
+    "echo $'hello\\tworld'",
+    "git log --format=$'%h\\t%s' -3",
+    "grep -rn $'git diff --no-index' docs",
 ];
 
 // Each of these ran the refused command unchecked before.
@@ -1170,6 +1193,39 @@ const wrapperBlocked = [
     ["script -qc 'g\"\"it diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
     ["script -qc 'gi\\t diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
     [`setarch x86_64 ${'git status '.repeat(9)}`, 'more than 8 commands'],
+    // A name the shell builds before it looks it up is the program that runs
+    // (#124): it decodes `$'...'` and `$"..."`, expands braces, and matches a
+    // wildcard in a path against the disk. Bare, behind a wrapper, behind a
+    // program the hook does not list, and inside a command string.
+    ["$'git' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ['$"git" diff --no-index /dev/null .env', '`git diff --no-index`'],
+    ["$'\\x67it' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ["$'\\147it' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ["$'\\u0067it' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ["$'sudo' id", 'privilege escalation'],
+    ['/usr/bin/g?t diff --no-index /dev/null .env', '`git diff --no-index`'],
+    ['/usr/bin/g[i]t log -p --output=x -1', '`git log --output'],
+    ['/usr/bin/s?do id', 'privilege escalation'],
+    ['/usr/bin/g* status', 'wildcard the shell matches'],
+    ['{git,} diff --no-index /dev/null .env', 'expands with its braces'],
+    ['g{i,x}t diff --no-index /dev/null .env', 'expands with its braces'],
+    ['{git,diff} --no-index /dev/null .env', 'expands with its braces'],
+    ['timeout 5 /usr/bin/g?t diff --no-index /dev/null .env', '`git diff --no-index`'],
+    ["timeout 5 $'git' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ['find . -exec /usr/bin/g?t diff --no-index /dev/null .env \\;', '`git diff --no-index`'],
+    ['setarch x86_64 {git,} diff --no-index /dev/null .env', '`setarch` runs a command'],
+    ['setarch x86_64 /usr/bin/g?t diff --no-index /dev/null .env', '`setarch` runs a command'],
+    ["setarch x86_64 $'git' diff --no-index /dev/null .env", '`setarch` runs a command'],
+    ["setarch x86_64 $'\\x67it' diff --no-index /dev/null .env", '`setarch` runs a command'],
+    ['setarch x86_64 $"git" diff --no-index /dev/null .env', '`setarch` runs a command'],
+    ['setarch x86_64 /usr/bin/s?do id', '`setarch` runs a command'],
+    ['script -qc "$\'git\' diff --no-index /dev/null .env" /dev/null', '`script` runs a command'],
+    ['script -qc "$\'\\x67it\' diff --no-index /dev/null .env" /dev/null', '`script` runs a command'],
+    ["script -qc '/usr/bin/g?t diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    ["script -qc '{git,} diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    // A backslash escapes the quote inside `$'...'`, so the string ends later
+    // and the substitution after it runs.
+    ["echo $'\\'' $(git push --force origin main)", 'force push'],
 ];
 
 for (const command of [...allowed, ...hostAllowed, ...wrapperAllowed]) {
