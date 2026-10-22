@@ -1043,6 +1043,13 @@ const wrapperAllowed = [
     'setarch x86_64 python3 -m pytest',
     'pgrep -a dnsmasq',
     'journalctl -u stubby',
+    // A look-up tool names a daemon to find it, not to start it (#122).
+    'pgrep -a tailscaled',
+    'pidof tailscaled',
+    'ls -l /usr/sbin/tailscaled',
+    "pgrep -f 'tailscaled --state'",
+    "journalctl --grep='dnsmasq started'",
+    "script -qc 'pgrep -a dnsmasq' /dev/null",
     'which sudo',
     'man git',
     "grep -rn 'git push --force' docs",
@@ -1195,6 +1202,15 @@ const wrapperBlocked = [
     ["script -qc 'g\"\"it diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
     ["script -qc 'gi\\t diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
     [`setarch x86_64 ${'git status '.repeat(9)}`, 'more than 8 commands'],
+    // A daemon's name behind a program that is not a look-up tool starts the
+    // daemon (#122).
+    ['setarch x86_64 tailscaled', 'Tailscale daemon'],
+    ['setarch x86_64 /usr/sbin/tailscaled', 'Tailscale daemon'],
+    ['prlimit tailscaled --state=mem:', 'Tailscale daemon'],
+    ["script -qc 'tailscaled' /dev/null", 'Tailscale daemon'],
+    ['setarch x86_64 stubby', "host's DNS daemon"],
+    ['setarch x86_64 dnsmasq', "host's DNS daemon"],
+    ['/usr/local/bin/pgrep tailscaled', 'Tailscale daemon'],
     // A name the shell builds before it looks it up is the program that runs
     // (#124): it decodes `$'...'` and `$"..."`, expands braces, and matches a
     // wildcard in a path against the disk. Bare, behind a wrapper, behind a

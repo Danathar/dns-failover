@@ -97,6 +97,10 @@
 //   - the dnsmasq and stubby daemons (also as /usr/sbin/dnsmasq, via
 //     /etc/init.d/): only the validate-and-exit forms `dnsmasq --test`
 //     (with --conf-file) and `stubby -i`, plus --version/--help, are fine.
+//     `tailscaled` is never fine. Behind a program this hook does not list
+//     (`setarch x86_64 tailscaled`) a daemon's name counts as that daemon,
+//     unless the program is a look-up tool (pgrep, pidof, journalctl, ps,
+//     man, dpkg, ls, ...; see DAEMON_LOOKUP_PROGRAMS).
 //   - `tailscale` CLI subcommands other than status/version/ip/ping/netcheck/
 //     whois/help: `tailscale set --accept-dns` is the change monitor.py makes.
 //   - curl/wget/http/https/xh naming tailscale.com (the API lives at
@@ -206,6 +210,16 @@ const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'mksh', 'ash', 'yash
 // which keeps `grep -rn 'git diff --no-index' docs` and `which sudo` working.
 // Only the bare spelling counts, and leaving a program out can only over-refuse.
 const ARGUMENT_ONLY_PROGRAMS = new Set(['echo', 'printf', 'grep', 'egrep', 'fgrep', 'which', 'whereis']);
+// These look a program up by its name or path and never run it, so behind them
+// a DNS or Tailscale daemon's name is not read as a command (`pgrep -a
+// dnsmasq`, `journalctl -u stubby`, `ls -l /usr/sbin/tailscaled`). Behind any
+// other program it is: `setarch x86_64 tailscaled` starts the daemon. As with
+// ARGUMENT_ONLY_PROGRAMS only the bare spelling counts, and leaving a look-up
+// tool out can only over-refuse.
+const DAEMON_LOOKUP_PROGRAMS = new Set([
+    'pgrep', 'pidof', 'ps', 'pstree', 'lsof', 'journalctl', 'man', 'whatis', 'apropos', 'apt', 'apt-cache', 'dpkg',
+    'dpkg-query', 'rpm', 'ls', 'stat', 'file', 'readlink', 'realpath', 'type',
+]);
 // Each checked command behind such a program is checked from where it starts
 // to the end of the segment, so the work grows with the square of the words.
 // Past this many the command is refused unread; no real invocation runs that many.
@@ -2115,14 +2129,17 @@ function unquoted(a) {
 function checkUnlistedProgram(w, inlineEnv, state) {
     const cmd = w[0];
     if (ARGUMENT_ONLY_PROGRAMS.has(cmd)) return null;
-    // The daemon names are what `pgrep -a dnsmasq` and `journalctl -u stubby`
-    // look up, so as a later word they are not read as a command.
-    const namesCheckedCommand = (a) => !DAEMON_NAMES.has(basename(a)) && namesCheckedOrDaemon(a);
+    // Behind a look-up tool (`pgrep -a dnsmasq`, `journalctl -u stubby`) a
+    // daemon's name is what it looks up, so it is not read as a command there.
+    // Behind any other program it is, in a later word and in a command string.
+    const lookup = DAEMON_LOOKUP_PROGRAMS.has(cmd);
+    const skipped = (name) => lookup && DAEMON_NAMES.has(name);
+    const namesCheckedCommand = (a) => !skipped(basename(a)) && namesCheckedOrDaemon(a);
     // The checked names braces or a wildcard in a path build (#124). Braces
     // are read as written: checkSegment() refuses them. A wildcard is read as
     // each name it fits, unless it fits so many that it is a list of files.
     const builtCommand = (a) => {
-        const names = builtNames(a).filter((name) => !DAEMON_NAMES.has(name));
+        const names = builtNames(a).filter((name) => !skipped(name));
         if (names.length && /[{}]/.test(a)) return [a];
         return names.length <= MAX_GLOB_NAMES ? names : [];
     };
