@@ -1043,10 +1043,42 @@ const wrapperAllowed = [
     'setarch x86_64 python3 -m pytest',
     'pgrep -a dnsmasq',
     'journalctl -u stubby',
+    // A look-up tool names a daemon to find it, not to start it (#122).
+    'pgrep -a tailscaled',
+    'pidof tailscaled',
+    'ls -l /usr/sbin/tailscaled',
+    "pgrep -f 'tailscaled --state'",
+    "journalctl --grep='dnsmasq started'",
+    "script -qc 'pgrep -a dnsmasq' /dev/null",
     'which sudo',
     'man git',
     "grep -rn 'git push --force' docs",
     "script -qc 'g\"\"it status' /dev/null",
+    // A name read the way the shell reads it passes as it would spelled out,
+    // and braces and wildcards that build no checked name are left alone (#124).
+    "$'git' status",
+    '$"git" log --oneline -1',
+    '/usr/bin/g?t status',
+    'setarch x86_64 /usr/bin/g?t status',
+    "setarch x86_64 $'git' status",
+    'git status',
+    'ls /usr/bin/g*',
+    'setarch x86_64 ls /usr/bin/g*',
+    "sh -c 'ls /usr/bin/g?t'",
+    'ls tests/*',
+    'wc -l tests/* scripts/*',
+    'ls *.py',
+    'wc -l *.md',
+    'cat {a,b}.txt',
+    'mkdir -p /var/tmp/dnsf-{a,b}',
+    "sh -c 'cp {a,b}.py /var/tmp'",
+    "script -qc 'cat {a,b}.txt' /dev/null",
+    "find . -name '*' -print",
+    "awk -F: '$1 == \"root\" {print $7}' /etc/passwd",
+    "awk '{ if ($1 > 0) print $2 }' x",
+    "echo $'hello\\tworld'",
+    "git log --format=$'%h\\t%s' -3",
+    "grep -rn $'git diff --no-index' docs",
 ];
 
 // Each of these ran the refused command unchecked before.
@@ -1170,6 +1202,50 @@ const wrapperBlocked = [
     ["script -qc 'g\"\"it diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
     ["script -qc 'gi\\t diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
     [`setarch x86_64 ${'git status '.repeat(9)}`, 'more than 8 commands'],
+    // A daemon's name behind a program that is not a look-up tool starts the
+    // daemon (#122).
+    ['setarch x86_64 tailscaled', 'Tailscale daemon'],
+    ['setarch x86_64 /usr/sbin/tailscaled', 'Tailscale daemon'],
+    ['prlimit tailscaled --state=mem:', 'Tailscale daemon'],
+    ["script -qc 'tailscaled' /dev/null", 'Tailscale daemon'],
+    ['setarch x86_64 stubby', "host's DNS daemon"],
+    ['setarch x86_64 dnsmasq', "host's DNS daemon"],
+    ['/usr/local/bin/pgrep tailscaled', 'Tailscale daemon'],
+    // A name the shell builds before it looks it up is the program that runs
+    // (#124): it decodes `$'...'` and `$"..."`, expands braces, and matches a
+    // wildcard in a path against the disk. Bare, behind a wrapper, behind a
+    // program the hook does not list, and inside a command string.
+    ["$'git' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ['$"git" diff --no-index /dev/null .env', '`git diff --no-index`'],
+    ["$'\\x67it' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ["$'\\147it' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ["$'\\u0067it' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ["$'sudo' id", 'privilege escalation'],
+    ['/usr/bin/g?t diff --no-index /dev/null .env', '`git diff --no-index`'],
+    ['/usr/bin/g[i]t log -p --output=x -1', '`git log --output'],
+    ['/usr/bin/s?do id', 'privilege escalation'],
+    ['/usr/bin/g* status', 'wildcard the shell matches'],
+    ['touch git && g?t push --force origin main', 'force'],
+    ['{git,} diff --no-index /dev/null .env', 'expands with its braces'],
+    ['g{i,x}t diff --no-index /dev/null .env', 'expands with its braces'],
+    ['{git,diff} --no-index /dev/null .env', 'expands with its braces'],
+    ['timeout 5 /usr/bin/g?t diff --no-index /dev/null .env', '`git diff --no-index`'],
+    ["timeout 5 $'git' diff --no-index /dev/null .env", '`git diff --no-index`'],
+    ['find . -exec /usr/bin/g?t diff --no-index /dev/null .env \\;', '`git diff --no-index`'],
+    ['setarch x86_64 {git,} diff --no-index /dev/null .env', '`setarch` runs a command'],
+    ['setarch x86_64 /usr/bin/g?t diff --no-index /dev/null .env', '`setarch` runs a command'],
+    ["setarch x86_64 $'git' diff --no-index /dev/null .env", '`setarch` runs a command'],
+    ["setarch x86_64 $'\\x67it' diff --no-index /dev/null .env", '`setarch` runs a command'],
+    ['setarch x86_64 $"git" diff --no-index /dev/null .env', '`setarch` runs a command'],
+    ['setarch x86_64 /usr/bin/s?do id', '`setarch` runs a command'],
+    ['setarch x86_64 g?t push --force', '`setarch` runs a command'],
+    ['script -qc "$\'git\' diff --no-index /dev/null .env" /dev/null', '`script` runs a command'],
+    ['script -qc "$\'\\x67it\' diff --no-index /dev/null .env" /dev/null', '`script` runs a command'],
+    ["script -qc '/usr/bin/g?t diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    ["script -qc '{git,} diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    // A backslash escapes the quote inside `$'...'`, so the string ends later
+    // and the substitution after it runs.
+    ["echo $'\\'' $(git push --force origin main)", 'force push'],
 ];
 
 for (const command of [...allowed, ...hostAllowed, ...wrapperAllowed]) {
