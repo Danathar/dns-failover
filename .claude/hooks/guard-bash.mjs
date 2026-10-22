@@ -1987,6 +1987,17 @@ function* commandStrings(word) {
 }
 
 /**
+ * A command string with its quotes, backslashes and `$` removed. A shell drops
+ * the quotes and backslashes before it looks a name up, so `s""udo` and `su\do`
+ * inside a command string run sudo. Removing more can only refuse more. The `$`
+ * is dropped too, so a `$'git'` string reaches `checkCommand()`; that function
+ * does not decode ANSI-C quoting, so such a string is still not refused there.
+ */
+function unquoted(a) {
+    return a.replace(/[$"'\\]/g, '');
+}
+
+/**
  * For a segment whose command is a program this hook neither checks nor steps
  * over (`setarch x86_64 git diff ...`, `prlimit ...`, `script -qc '...'`), the
  * refusal for the checked command it would run, or null. Each later word that
@@ -2023,7 +2034,8 @@ function checkUnlistedProgram(w, inlineEnv, state) {
         if (!refusal) {
             for (const text of commandStrings(w[n])) {
                 spend();
-                if (!text.split(COMMAND_STRING_SEPARATORS).some((piece) => piece && namesCheckedCommand(piece))) continue;
+                const names = (t) => t.split(COMMAND_STRING_SEPARATORS).some((piece) => piece && namesCheckedCommand(piece));
+                if (!names(text) && !names(unquoted(text))) continue;
                 refusal = checkCommand(text, Object.create(state));
                 if (refusal) break;
             }

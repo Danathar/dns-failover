@@ -1046,6 +1046,7 @@ const wrapperAllowed = [
     'which sudo',
     'man git',
     "grep -rn 'git push --force' docs",
+    "script -qc 'g\"\"it status' /dev/null",
 ];
 
 // Each of these ran the refused command unchecked before.
@@ -1160,6 +1161,14 @@ const wrapperBlocked = [
     ['GIT_EXTERNAL_DIFF=x setarch x86_64 git diff', '`setarch` runs a command'],
     ['script -qc "git diff --no-index /dev/null .env" /dev/null', '`script` runs a command'],
     ["script -qc'git push --force origin main' /dev/null", '`script` runs a command'],
+    // A shell drops quotes and backslashes before it looks a name up, so a
+    // name split by them inside a command string still runs.
+    ["script -qc 's\"\"udo id' /dev/null", '`script` runs a command'],
+    ["script -qc 'su\\do id' /dev/null", '`script` runs a command'],
+    ['script -qc "\'s\'udo id" /dev/null', '`script` runs a command'],
+    ["script -qc 'g\"\"it push --force origin main' /dev/null", '`script` runs a command'],
+    ["script -qc 'g\"\"it diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
+    ["script -qc 'gi\\t diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
     [`setarch x86_64 ${'git status '.repeat(9)}`, 'more than 8 commands'],
 ];
 
