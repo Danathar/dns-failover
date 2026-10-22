@@ -1050,6 +1050,16 @@ const wrapperAllowed = [
     "pgrep -f 'tailscaled --state'",
     "journalctl --grep='dnsmasq started'",
     "script -qc 'pgrep -a dnsmasq' /dev/null",
+    // Nor is a daemon's name a glob in a path builds.
+    'pgrep -a /usr/sbin/tailscale?',
+    // Each program that only prints, matches or looks up its words is left
+    // unread.
+    "printf '%s\\n' 'git push --force'",
+    "egrep -rn 'sudo|git push --force' docs",
+    "fgrep -rn 'git push --force' docs",
+    'whereis sudo',
+    // Eight checked commands behind one program are still read, not refused unread.
+    `setarch x86_64 ${'git status '.repeat(8)}`,
     'which sudo',
     'man git',
     "grep -rn 'git push --force' docs",
@@ -1167,7 +1177,11 @@ const wrapperBlocked = [
     // chrt reads its priority with strtol: a sign or leading blanks still make the word the priority.
     ['chrt -o +0 sudo id', 'privilege escalation'],
     ['chrt -o -- -0 sudo id', 'privilege escalation'],
-    ["chrt -b ' 0' sudo id", 'privilege escalation'],
+    // A misread priority would leave chrt's command to checkUnlistedProgram(),
+    // which refuses sudo too, so match the refusal from chrt's own reading.
+    ["chrt -b ' 0' sudo id", 'guard-bash: Blocked: `sudo`'],
+    ["chrt -b '\t0' sudo id", 'guard-bash: Blocked: `sudo`'],
+    ["chrt -b '\n0' sudo id", 'guard-bash: Blocked: `sudo`'],
     ['chrt -o +0 bash install-dns-failover.sh', 'would execute an installer'],
     ['unshare -rS 0 sudo id', 'privilege escalation'],
     ['unshare --setu 0 sudo id', 'privilege escalation'],
@@ -1190,6 +1204,42 @@ const wrapperBlocked = [
     ['setarch x86_64 python3 -m pytest -p evil', '`setarch` runs a command'],
     ['setarch x86_64 gh pr create --title t', '`setarch` runs a command'],
     ['setarch x86_64 sudo id', 'privilege escalation'],
+    // Only the bare spelling of a program that just prints or matches is left unread.
+    ['./grep sudo id', '`grep` runs a command'],
+    // Assignments between the program and the command it runs reach that command.
+    ['setarch x86_64 GIT_EXTERNAL_DIFF=x git diff', '`setarch` runs a command'],
+    ['prlimit GIT_EXTERNAL_DIFF=x git diff', '`prlimit` runs a command'],
+    // A command string is read from an option's attached value, after `=` or
+    // after any letter of a short-option cluster, and a later string that
+    // passes does not undo an earlier refusal.
+    ['script --command=sudo /dev/null', '`script` runs a command'],
+    ['script -csudo /dev/null', '`script` runs a command'],
+    ["script -qc'sudo id git status' /dev/null", '`script` runs a command'],
+    // A checked name is found next to any of the shell's separators in a command string.
+    ["script -qc 'ls;sudo id' /dev/null", '`script` runs a command'],
+    ["script -qc 'true&&sudo id' /dev/null", '`script` runs a command'],
+    ["script -qc 'true|sudo id' /dev/null", '`script` runs a command'],
+    ["script -qc '(sudo id)' /dev/null", '`script` runs a command'],
+    ["script -qc '(id;sudo)' /dev/null", '`script` runs a command'],
+    ["script -qc 'sudo<x' /dev/null", '`script` runs a command'],
+    ["script -qc 'sudo>x' /dev/null", '`script` runs a command'],
+    ["script -qc 'echo `sudo id`' /dev/null", '`script` runs a command'],
+    [`script -qc "'sudo' id" /dev/null`, '`script` runs a command'],
+    [`script -qc '"sudo" id' /dev/null`, '`script` runs a command'],
+    ["script -qc 'true\tsudo id' /dev/null", '`script` runs a command'],
+    // Each name checkSegment() checks is read behind such a program. The rows
+    // name no daemon, so the daemon rule cannot refuse them in its place.
+    ['setarch x86_64 eval ./install-dns-failover.sh', '`setarch` runs a command'],
+    ['setarch x86_64 source install-dns-failover.sh', '`setarch` runs a command'],
+    ['setarch x86_64 coverage run tailscale-dns-failover/monitor.py', '`setarch` runs a command'],
+    ['setarch x86_64 service cups stop', '`service` is only allowed'],
+    ['setarch x86_64 tailscale set --accept-dns=false', '`setarch` runs a command'],
+    ['setarch x86_64 pkill -f dns-upstream', '`pkill` of dnsmasq/stubby'],
+    ['setarch x86_64 killall -r dns-failover', '`killall` of dnsmasq/stubby'],
+    ['setarch x86_64 systemd-run ./install-dns-failover.sh', '`setarch` runs a command'],
+    ['setarch x86_64 flatpak-spawn --host ./install-dns-failover.sh', '`setarch` runs a command'],
+    ['setarch x86_64 watch -n1 ./install-dns-failover.sh', '`setarch` runs a command'],
+    ['setarch x86_64 find . -exec ./install-dns-failover.sh ;', '`setarch` runs a command'],
     ['GIT_EXTERNAL_DIFF=x setarch x86_64 git diff', '`setarch` runs a command'],
     ['script -qc "git diff --no-index /dev/null .env" /dev/null', '`script` runs a command'],
     ["script -qc'git push --force origin main' /dev/null", '`script` runs a command'],
