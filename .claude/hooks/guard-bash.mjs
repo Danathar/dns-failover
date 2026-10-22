@@ -2014,13 +2014,15 @@ function namesCheckedOrDaemon(a) {
 
 // A checked name the shell builds before it looks it up (#124). Bash expands
 // a word's braces (`{git,}` is git, the empty alternative dropped) and matches
-// a word with a `/` and a wildcard against the disk (`/usr/bin/g?t` is
-// /usr/bin/git), so the word as typed is not the program that runs. The
-// tokenizer has already decoded `$'...'` and `$"..."` and dropped quotes. A
-// bare `g?t` matches files in the working directory, not a program on the
-// PATH, so only a wildcard in a path counts. A wildcard is matched against the
-// checked names, with the python and pytest spellings those patterns stand
-// for. A name built from a variable is still not followed.
+// a word with a wildcard against the disk (`/usr/bin/g?t` is /usr/bin/git),
+// so the word as typed is not the program that runs. The tokenizer has already
+// decoded `$'...'` and `$"..."` and dropped quotes. A bare `g?t` expands
+// against the working directory, and the name it becomes is then looked up on
+// the PATH, so a file called `git` in the working directory makes it run git.
+// It is read as the checked name it matches, as a wildcard in a path is. A
+// wildcard is matched against the checked names, with the python and pytest
+// spellings those patterns stand for. A name built from a variable is still
+// not followed.
 const GLOB_NAMES = [...PRIVILEGE, ...CHECKED_NAMES, 'python', 'python3', 'pypy3', 'pytest', 'py.test'];
 const BRACE_GROUP = /\{([^{}]*,[^{}]*)\}/;
 // A word with more brace alternatives than this is read only with its braces
@@ -2060,7 +2062,7 @@ export function builtNames(word) {
         if (!form || /\s/.test(form)) continue; // a word with a space in it names no program
         if (form !== word && namesCheckedOrDaemon(form)) found.add(basename(form));
         const last = form.slice(form.lastIndexOf('/') + 1);
-        if (!form.includes('/') || !/[*?[]/.test(last)) continue;
+        if (!/[*?[]/.test(last)) continue;
         const re = new RegExp(`^${globToRegExp(last)}$`, 's');
         for (const name of GLOB_NAMES) if (re.test(name)) found.add(name);
     }
