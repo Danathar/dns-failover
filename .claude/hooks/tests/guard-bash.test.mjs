@@ -1294,8 +1294,10 @@ const wrapperBlocked = [
     ["script -qc '/usr/bin/g?t diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
     ["script -qc '{git,} diff --no-index /dev/null .env' /dev/null", '`script` runs a command'],
     // A backslash escapes the quote inside `$'...'`, so the string ends later
-    // and the substitution after it runs.
-    ["echo $'\\'' $(git push --force origin main)", 'force push'],
+    // and the substitution after it runs. The shared reader does not end the
+    // string where bash does, so the guard refuses the whole line before it
+    // reads the substitution.
+    ["echo $'\\'' $(git push --force origin main)", 'where bash ends it'],
 ];
 
 for (const command of [...allowed, ...hostAllowed, ...wrapperAllowed]) {
