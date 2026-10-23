@@ -1387,8 +1387,7 @@ export function isProtected(word) {
     const last = w.slice(w.lastIndexOf('/') + 1);
     if (/[{}]/.test(last)) return true;
     if (!/[*?[]/.test(last)) return false;
-    const re = new RegExp(`^${globToRegExp(last)}$`, 's');
-    return PROTECTED_NAMES.some((n) => re.test(n));
+    return PROTECTED_NAMES.some((n) => globMatch(last, n));
 }
 
 /**
@@ -1397,22 +1396,44 @@ export function isProtected(word) {
  * expression (with `[:class:]` parts and a leading `]` handled) as any one
  * character. An unclosed `[` is a literal, as in the shell.
  */
-function globToRegExp(pattern) {
-    let re = '';
-    for (let i = 0; i < pattern.length; i++) {
-        const c = pattern[i];
-        if (c === '*') {
-            re += '.*';
-        } else if (c === '?') {
-            re += '.';
-        } else if (c === '[' && bracketEnd(pattern, i) !== -1) {
-            re += '.';
-            i = bracketEnd(pattern, i);
+function globMatch(pattern, text) {
+    // Match a pathname pattern against one name in linear time, so an input
+    // cannot blow the hook's time budget (a pattern of many `*` compiled to a
+    // regexp — `.*.*.*…` — backtracks exponentially against a non-matching
+    // name, and that regexp runs inside a single `.test()` call that the
+    // per-step budget check in spend() can never interrupt, so the hook runs
+    // past its timeout and Claude Code then runs the command unchecked). This
+    // is the classic single-star-pointer algorithm: `*` matches any run, `?`
+    // and a bracket expression match one character, every other character is
+    // literal, and an unclosed `[` is literal — the same semantics the old
+    // regexp gave.
+    let p = 0;
+    let t = 0;
+    let star = -1;
+    let afterStar = 0;
+    const consumesOne = (i) =>
+        pattern[i] === '?' || (pattern[i] === '[' && bracketEnd(pattern, i) !== -1);
+    while (t < text.length) {
+        if (p < pattern.length && consumesOne(p)) {
+            p = pattern[p] === '[' ? bracketEnd(pattern, p) + 1 : p + 1;
+            t++;
+        } else if (p < pattern.length && pattern[p] === '*') {
+            star = p;
+            afterStar = t;
+            p++;
+        } else if (p < pattern.length && pattern[p] === text[t]) {
+            p++;
+            t++;
+        } else if (star !== -1) {
+            p = star + 1;
+            afterStar++;
+            t = afterStar;
         } else {
-            re += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return false;
         }
     }
-    return re;
+    while (pattern[p] === '*') p++;
+    return p === pattern.length;
 }
 
 /** Index of the `]` closing the bracket expression opened at `start`, or -1. */
@@ -2077,8 +2098,7 @@ export function builtNames(word) {
         if (form !== word && namesCheckedOrDaemon(form)) found.add(basename(form));
         const last = form.slice(form.lastIndexOf('/') + 1);
         if (!/[*?[]/.test(last)) continue;
-        const re = new RegExp(`^${globToRegExp(last)}$`, 's');
-        for (const name of GLOB_NAMES) if (re.test(name)) found.add(name);
+        for (const name of GLOB_NAMES) if (globMatch(last, name)) found.add(name);
     }
     return [...found];
 }

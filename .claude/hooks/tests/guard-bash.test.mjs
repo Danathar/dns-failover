@@ -1353,6 +1353,19 @@ test('a command still being read past the budget is refused, not left to the hoo
     assert.match(r.stderr, /could not finish checking the command within/);
 });
 
+test('a word of many wildcards cannot stall the hook into a timeout, so a command behind it is still refused (#128)', () => {
+    // A `*`-heavy word compiled to a regexp (`.*.*.*…`) backtracks
+    // exponentially against a non-matching name, inside a single uncancellable
+    // `.test()` the budget check cannot interrupt — so the hook runs past its
+    // timeout and Claude Code runs the command. Here the stalling word is first,
+    // and a blocked `git push --force` follows it.
+    const command = `${'*'.repeat(64)}Z; git push --force origin main`;
+    const input = JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+    const r = spawnSync(process.execPath, [HOOK], { input, encoding: 'utf8', timeout: 10000, env: { ...process.env, CLAUDE_PROJECT_DIR: PROJECT } });
+    assert.equal(r.signal, null, 'hook timed out: glob matching still backtracks');
+    assert.equal(r.status, 2, r.stderr);
+});
+
 test('an internal error fails closed (exit 2), not open', () => {
     const code = `import { main } from ${JSON.stringify(HOOK)}; main(() => { throw new Error('boom'); });`;
     const input = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git status' } });
