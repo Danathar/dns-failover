@@ -1902,7 +1902,10 @@ function untrackedDirectoryChange(words) {
 // before it moved to the shared reader, so until the canonical copy does, a
 // command line holding such a string is refused. The body is matched the way
 // bash's lexer reads it: a backslash and the character after it are one unit.
-const MISREAD_ANSI_C = /\$'(?:[^'\\]|\\[^'c]|\\c[^'\\]|\\c\\[^'])*(?:\\'|\\c\\?')/;
+// `\c` before a quote or any backslash is refused outright: bash and the
+// reader disagree on how many characters it takes (`$'\c\\'` ends at the
+// final quote for bash, but not for the reader).
+const MISREAD_ANSI_C = /\$'(?:[^'\\]|\\[^'c]|\\c[^'\\])*(?:\\'|\\c['\\])/;
 
 /** Analyse a command line. Returns null if allowed, else { blocked, reason }. */
 export function checkCommand(command, state = {}) {

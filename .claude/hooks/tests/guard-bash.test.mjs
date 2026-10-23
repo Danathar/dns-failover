@@ -1298,6 +1298,7 @@ const wrapperBlocked = [
     // string where bash does, so the guard refuses the whole line before it
     // reads the substitution.
     ["echo $'\\'' $(git push --force origin main)", 'where bash ends it'],
+    ["echo $'\\c\\\\' ; git push --force origin main", 'where bash ends it'],
 ];
 
 for (const command of [...allowed, ...hostAllowed, ...wrapperAllowed]) {
