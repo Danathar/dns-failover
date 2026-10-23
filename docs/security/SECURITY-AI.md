@@ -66,7 +66,11 @@ guardrail for this rule: it refuses commands that would break it before they
 run. It is a backstop for honest mistakes, not a sandbox, and it only covers
 Claude Code. Other agents remain bound by `AGENTS.md` and by not having the
 credentials. Do not weaken, bypass or disable it; the hook and its tests are
-Tier 1.
+Tier 1. The part that reads a command line the way the shell would,
+`.claude/hooks/shell-reader.mjs`, is shared byte for byte with the owner's
+other repositories that carry this guard (canonical copy in Danathar/akmods,
+hash pinned by `.claude/hooks/tests/shell-reader.test.mjs`): a reading fix
+lands there first and is copied here, never edited here alone.
 
 ## 3. The installer
 
