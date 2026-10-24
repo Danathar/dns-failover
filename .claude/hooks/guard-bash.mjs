@@ -159,7 +159,7 @@ import { fileURLToPath } from 'node:url';
 // sha256), so a reading fix lands in its canonical copy in Danathar/akmods
 // first and is copied here byte for byte. What is refused, and why, stays here.
 import {
-    ARGUMENT_ONLY_PROGRAMS, BRACE_GROUP, braceForms, BUDGET_MS, changesDirectory, CHDIR, COMMAND_STRING_SEPARATORS,
+    ARGUMENT_ONLY_PROGRAMS, braceForms, BUDGET_MS, changesDirectory, CHDIR, COMMAND_STRING_SEPARATORS,
     commandNameReader, commandStrings, EXEC_GIT_CONFIG, expandWrapperOptions, extractSubstitutions, FIND_EXEC, firstWord,
     fishScripts, GIT_EXEC_OPTION, GIT_SHORT_UPLOAD_PACK, GIT_UPLOAD_PACK_OPTION, GIT_UPLOAD_PACK_SUBCOMMANDS, isAssignment,
     KEYWORDS, MAX_UNLISTED_INNER, OverBudget, REFUSED_GIT_OPTION, RISKY_GIT_CONFIG, riskyEnv, SAFE_ENV, SHELLS, spend,
@@ -1063,6 +1063,11 @@ export function isProtected(word) {
  * name the shell would match: `*` and `?` as in the shell, and a bracket
  * expression (with `[:class:]` parts and a leading `]` handled) as any one
  * character. An unclosed `[` is a literal, as in the shell.
+ *
+ * The shared globMatches() reads POSIX classes (`[[:alpha:]]`) since akmods
+ * 9d62f85, but matches a set by its members; this reading stays because it is
+ * broader: a set that bash could match by another rule (`[G]it` under
+ * `shopt -s nocaseglob`, a range in a locale's collation order) still counts.
  */
 function globMatch(pattern, text) {
     // Match a pathname pattern against one name in linear time, so an input
@@ -1505,7 +1510,8 @@ const MAX_GLOB_NAMES = 4;
  *
  * The reading is the shared builtCommandName(), with this guard's stricter
  * readings kept on top of it: a brace form also counts when it is a python or
- * pytest version the list does not spell out (`{python3.11,}`); the word with
+ * pytest version the list does not spell out (`{python3.11,}`,
+ * `python3.1{1..1}`); the word with
  * its braces and commas taken out counts as one more form; and a wildcard is
  * matched with globMatch(), which reads a bracket expression as any one
  * character (so `[[:alpha:]]it` and `[!x]it` count as git), and reads a word
@@ -1515,7 +1521,9 @@ export function builtNames(word, commandWord = false) {
     if (!/[{}*?[]/.test(word)) return { braces: false, names: [] };
     const shared = builtCommandName(word, commandWord);
     const found = new Set(shared?.globs);
-    const forms = (BRACE_GROUP.test(word) && braceForms(word)) || [word];
+    // Every brace form the shared reader makes: comma groups, sequences
+    // (`python3.1{1..1}` is python3.11) and groups bash leaves as written.
+    const forms = braceForms(word) ?? [word];
     if (/[{}]/.test(word)) forms.push(word.replace(/[{},]/g, ''));
     for (const form of forms) {
         if (!form || /\s/.test(form)) continue; // a word with a space in it names no program
@@ -1735,10 +1743,14 @@ function checkSegment(words, state) {
     if (cmd === 'export' || ((cmd === 'declare' || cmd === 'typeset') && args.some((a) => /^-[a-zA-Z]*x/.test(a)))) {
         for (const a of args) {
             if (a.startsWith('GH_REPO=')) state.exportedGhRepo = a.slice(8);
+            // `export GH_REPO+=X` appends to a value this hook may not know: no known repository.
+            if (a.startsWith('GH_REPO+=') && a !== 'GH_REPO+=') state.exportedGhRepo = null;
             // `export NAME` without a value exports an earlier assignment: value unknown (null).
+            // `export NAME+=value` appends to NAME; it is kept as `NAME+`, which riskyEnv() reads as NAME.
             const eq = a.indexOf('=');
             const name = eq === -1 ? a : a.slice(0, eq);
-            if (/^(GIT_CONFIG_|GIT_SSH)/i.test(name) || WATCHED_ENV.test(name) || PYTHON_ENV.test(name)) {
+            const base = name.endsWith('+') ? name.slice(0, -1) : name;
+            if (/^(GIT_CONFIG_|GIT_SSH)/i.test(base) || WATCHED_ENV.test(base) || PYTHON_ENV.test(base)) {
                 (state.exportedEnv ??= {})[name] = eq === -1 ? null : a.slice(eq + 1);
             }
         }
@@ -1753,7 +1765,10 @@ function checkSegment(words, state) {
         return null;
     }
     if (cmd === 'gh') {
-        const envRepo = inlineEnv.GH_REPO ?? state.exportedGhRepo ?? null;
+        // `GH_REPO+=X gh ...` (an assignment the shared reader reads since akmods
+        // 9d62f85) appends to a value this hook may not know: no known repository.
+        const appended = Object.hasOwn(inlineEnv, 'GH_REPO+') && inlineEnv['GH_REPO+'] !== '';
+        const envRepo = appended ? null : (inlineEnv.GH_REPO ?? state.exportedGhRepo ?? null);
         return checkGh(args, envRepo);
     }
     if (cmd === 'git') return checkGit(args, inlineEnv, state.exportedEnv ?? {});
@@ -1893,18 +1908,16 @@ function untrackedDirectoryChange(words) {
     return k === -1 || !CHDIR.has(words[k]);
 }
 
-// Two `$'...'` spellings the shared reader does not end where bash does. Inside
-// `$(...)` it takes the string for a plain '...' one, so an escaped quote
-// (`$(printf $'\'') ...`) ends it early and the rest of the line is read as
-// quoted text; and it lets `\c` take the next character even when that is the
-// closing quote or the backslash of `\'`. Either way a command bash runs after
-// the string can be read as data. This guard's own reading followed both
-// before it moved to the shared reader, so until the canonical copy does, a
-// command line holding such a string is refused. The body is matched the way
-// bash's lexer reads it: a backslash and the character after it are one unit.
-// `\c` before a quote or any backslash is refused outright: bash and the
-// reader disagree on how many characters it takes (`$'\c\\'` ends at the
-// final quote for bash, but not for the reader).
+// `$'...'` strings whose end is easy to misplace: one holding an escaped quote
+// (`$(printf $'\'') ...`), or `\c` before a quote or backslash (`$'\c\\'`).
+// Read in the wrong place, a command bash runs after the string is taken for
+// data. The shared reader now ends them where bash does when it reads words,
+// substitutions and `$(...)` bodies (readAnsiC(), closeParen(), akmods
+// 9d62f85), but other parts of it still read `$'` as a plain `'`: a heredoc
+// delimiter (`<<$'\''`, readHeredocStart()) and the body of an extended glob
+// group (extglobAsStar()). So a command line holding such a string is still
+// refused. The body is matched the way bash's lexer reads it: a backslash and
+// the character after it are one unit.
 const MISREAD_ANSI_C = /\$'(?:[^'\\]|\\[^'c]|\\c[^'\\])*(?:\\'|\\c['\\])/;
 
 /** Analyse a command line. Returns null if allowed, else { blocked, reason }. */
