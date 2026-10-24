@@ -43,6 +43,9 @@ function run(command, toolName = 'Bash', extra = {}) {
 
 const allowed = [
     "cat <<\\EOF\n$(sudo ls)\nEOF",
+    // and so does a `$'...'` one, decoded the way bash decodes it (akmods#188)
+    "cat <<$'EOF'\n$(sudo ls)\nEOF",
+    "cat <<-$'EOF'\n\t$(sudo ls)\n\tEOF",
     // --- node --test and read-only git: the forms .claude/settings.json pre-approves ---
     "node --test 'scripts/tests/*.test.mjs'",
     "node --test '.claude/hooks/tests/*.test.mjs'",
@@ -580,6 +583,8 @@ const hostBlocked = [
     ['cat <<\\EOF\nx\nEOF\nsudo ls', 'privilege'],
     ['cat <<E\\OF\nx\nEOF\nsudo ls', 'privilege'],
     ['cat <<-\\EOF\n\tx\n\tEOF\nsudo ls', 'privilege'],
+    // a `$'...'` heredoc delimiter is decoded: `\x45` is E (akmods#188)
+    ["cat <<$'\\x45OF'\nx\nEOF\nsudo ls", 'privilege'],
     ['cat <<\\EOF\nx\nEOF\n./install-dns-failover.sh', 'would execute'],
     // with no command, distrobox-host-exec runs the host shell on its stdin
     ['distrobox-host-exec', 'no command'],
@@ -1299,6 +1304,10 @@ const wrapperBlocked = [
     // reads the substitution.
     ["echo $'\\'' $(git push --force origin main)", 'where bash ends it'],
     ["echo $'\\c\\\\' ; git push --force origin main", 'where bash ends it'],
+    // The shared reader now decodes a `$'...'` heredoc delimiter (akmods d790ec8),
+    // but the guard still refuses the whole line, as above.
+    ["cat <<$'\\'' ; git push --force origin main", 'where bash ends it'],
+    ["cat <<-$'\\'' ; git push --force origin main", 'where bash ends it'],
 ];
 
 for (const command of [...allowed, ...hostAllowed, ...wrapperAllowed]) {

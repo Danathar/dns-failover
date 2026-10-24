@@ -1913,11 +1913,11 @@ function untrackedDirectoryChange(words) {
 // Read in the wrong place, a command bash runs after the string is taken for
 // data. The shared reader now ends them where bash does when it reads words,
 // substitutions and `$(...)` bodies (readAnsiC(), closeParen(), akmods
-// 9d62f85), but other parts of it still read `$'` as a plain `'`: a heredoc
-// delimiter (`<<$'\''`, readHeredocStart()) and the body of an extended glob
-// group (extglobAsStar()). So a command line holding such a string is still
-// refused. The body is matched the way bash's lexer reads it: a backslash and
-// the character after it are one unit.
+// 9d62f85), and a heredoc delimiter since akmods d790ec8 (`<<$'\''`,
+// readHeredocStart()), but the body of an extended glob group
+// (extglobAsStar()) still reads `$'` as a plain `'`. So a command line holding
+// such a string is still refused. The body is matched the way bash's lexer
+// reads it: a backslash and the character after it are one unit.
 const MISREAD_ANSI_C = /\$'(?:[^'\\]|\\[^'c]|\\c[^'\\])*(?:\\'|\\c['\\])/;
 
 /** Analyse a command line. Returns null if allowed, else { blocked, reason }. */
