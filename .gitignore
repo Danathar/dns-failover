@@ -24,3 +24,7 @@ dnsmasq.conf
 .coverage.*
 htmlcov/
 coverage.xml
+
+# Mutation check (scripts/mutation-check.mjs) report and Stryker sandbox.
+reports/mutation/
+.stryker-tmp/
