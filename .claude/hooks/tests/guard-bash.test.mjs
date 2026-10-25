@@ -448,6 +448,13 @@ const blocked = [
     ['env --unset -iu git push --force origin main', 'force'],
     // Options after env's lone `-` are still unpacked.
     ['env - -iu X git push --force origin main', 'force'],
+    // The shell drops a backslash-newline inside an extended glob group before
+    // it reads the word, so a group split that way still names the program.
+    ["bash -O extglob -c '/usr/bin/g@\\\n(i)t push --force origin main'", 'force'],
+    ["bash -O extglob -c 'g@\\\n(i)t push --force origin main'", 'force'],
+    ["bash -c 'shopt -s extglob\n/usr/bin/g@\\\n(i)t push --force origin main'", 'force'],
+    ["bash -O extglob -c 's@\\\n(u)do id'", 'privilege escalation'],
+    ["bash -O extglob -c 'gh@\\\n() pr merge 1'", 'gh pr merge'],
 ];
 
 // ---------------------------------------------------------------------------
