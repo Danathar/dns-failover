@@ -37,6 +37,8 @@
           - 'scripts/tests/**'
           - '.claude/hooks/tests/**'
           - 'tailscale-dns-failover/test_*.py'
+          - 'stryker.config.mjs'
+          - '.mutation-survivors.json'
 
 'area/ci':
   - changed-files:
