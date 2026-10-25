@@ -64,7 +64,7 @@ changes (#134).
   and in the step summary under GitHub Actions), 2 the check could not run. A full guard test run is about
   30 s and runs once per mutant.
 - **In CI:** the advisory `Mutation check on changed lines (advisory)` job that runs it on each pull request
-  is a workflow change tracked in #134; until it lands, run the check by hand. It is meant to be
+  is the `mutation` job in [`agent-tooling.yml`](../.github/workflows/agent-tooling.yml). It is
   `continue-on-error`, pull requests only, and never a required check.
 - **What to do with a survivor:** add a test that fails on it. If it is equivalent (behaves the same) or
   harmless over-refusal (the guard refuses more, never less), add the printed entry to
