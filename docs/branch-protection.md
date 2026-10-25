@@ -108,6 +108,12 @@ import format, so it applies as-is.
     [`agent-tooling.yml`](../.github/workflows/agent-tooling.yml), which runs
     the Bash guard hook's tests and validates `.claude/settings.json`.
 
+  The same workflow has a second job, `Mutation check on changed lines
+  (advisory)`, that is **not** required and must never be added to the
+  ruleset: it is `continue-on-error`, runs on pull requests only, and only
+  lists changed safety-check lines no test notices (see
+  [`quality.md`](quality.md#mutation-check-on-changed-lines)).
+
   All four workflows run on every pull request to `main` with no path
   filter, so no pull request waits for a check that never starts. Renaming a
   job (its `name:`), or adding a path filter, blocks every merge until this
