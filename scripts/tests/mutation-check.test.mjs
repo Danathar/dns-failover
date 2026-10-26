@@ -6,15 +6,19 @@
 // that stop before Stryker), so no Stryker install is needed.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+    BUDGET_MINUTES,
+    CHUNK_LINES,
     HASH_PIN_TESTS,
     HOOK_TESTS,
     LEDGER,
+    STRYKER_TMP,
+    chunkRanges,
     evaluate,
     formatSurvivor,
     groupFor,
@@ -268,6 +272,15 @@ test('the hook test files exist and the Stryker config defaults to the same comm
     assert.doesNotMatch(config.replace(/^\s*\/\/.*$/gm, ''), /shell-reader\.test\.mjs/);
 });
 
+test("the sandbox removed after a stopped run is the config's temp directory", () => {
+    const config = readFileSync(join(ROOT, 'stryker.config.mjs'), 'utf8');
+    assert.ok(config.includes(`tempDirName: '${STRYKER_TMP}'`), 'stryker.config.mjs tempDirName');
+});
+
+test('the default budget ends before the 45-minute CI job does', () => {
+    assert.ok(BUDGET_MINUTES > 0 && BUDGET_MINUTES < 45, String(BUDGET_MINUTES));
+});
+
 test('planRuns builds one Stryker run per test command, sorted by file', () => {
     const changed = new Map([
         ['scripts/check-policies.mjs', [{ start: 7, end: 7 }]],
@@ -296,6 +309,47 @@ test('planRuns builds one Stryker run per test command, sorted by file', () => {
         ],
         untested: ['scripts/pr-metrics.mjs'],
     });
+});
+
+const R = (file, start, end) => ({ file, start, end });
+
+test('chunkRanges packs whole ranges, in order, up to the line limit', () => {
+    assert.deepEqual(chunkRanges([], 20), []);
+    assert.deepEqual(chunkRanges([R('a', 1, 10), R('a', 12, 21), R('b', 1, 1)], 20), [
+        ['a:1-10', 'a:12-21'],
+        ['b:1-1'],
+    ]);
+    // A range is never cut, even when it is longer than the limit.
+    assert.deepEqual(chunkRanges([R('a', 1, 1), R('a', 3, 40), R('a', 50, 50)], 20), [
+        ['a:1-1'],
+        ['a:3-40'],
+        ['a:50-50'],
+    ]);
+    assert.deepEqual(chunkRanges([R('a', 1, 20), R('a', 30, 30)]), [['a:1-20'], ['a:30-30']]);
+    // A new run starts counting from zero.
+    assert.deepEqual(chunkRanges([R('a', 1, 16), R('a', 20, 24), R('a', 30, 34)], 20), [
+        ['a:1-16'],
+        ['a:20-24', 'a:30-34'],
+    ]);
+    assert.equal(CHUNK_LINES, 20);
+});
+
+test('planRuns names the runs of a split group <group>-1, <group>-2, ... and keeps each command', () => {
+    const changed = new Map([
+        ['.claude/hooks/guard-bash.mjs', [{ start: 1, end: 3 }, { start: 9, end: 9 }]],
+        ['.claude/hooks/shell-reader.mjs', [{ start: 5, end: 6 }]],
+        ['scripts/check-policies.mjs', [{ start: 7, end: 7 }]],
+    ]);
+    const hooks = testCommand(HOOK_TESTS);
+    assert.deepEqual(planRuns(changed, TESTS, 4).runs, [
+        { name: 'hooks-1', command: hooks, mutate: ['.claude/hooks/guard-bash.mjs:1-3', '.claude/hooks/guard-bash.mjs:9-9'] },
+        { name: 'hooks-2', command: hooks, mutate: ['.claude/hooks/shell-reader.mjs:5-6'] },
+        {
+            name: 'scripts-check-policies',
+            command: 'node --test scripts/tests/check-policies.test.mjs',
+            mutate: ['scripts/check-policies.mjs:7-7'],
+        },
+    ]);
 });
 
 test('planRuns is empty when only tests and docs change', () => {
@@ -500,6 +554,27 @@ test('summarize writes exactly this text', () => {
     );
 });
 
+test('summarize lists the lines the time budget did not reach, before anything else', () => {
+    assert.equal(
+        summarize([], [], [], ['.claude/hooks/a.mjs:1-3', '.claude/hooks/a.mjs:9-9'], 40),
+        [
+            '## Mutation check on changed lines (advisory)',
+            '',
+            'The 40-minute time budget ran out before these changed lines were checked; ' +
+                'run the check by hand to see them (see docs/quality.md):',
+            '',
+            '- .claude/hooks/a.mjs:1-3',
+            '- .claude/hooks/a.mjs:9-9',
+            '',
+            '',
+            '0 survivor(s) accepted in the ledger.',
+        ].join('\n'),
+    );
+    const both = summarize([SURVIVOR], [], [], ['x.mjs:1-1'], 7);
+    assert.match(both, /^## Mutation check on changed lines \(advisory\)\n\nThe 7-minute time budget ran out/);
+    assert.ok(both.indexOf('- x.mjs:1-1') < both.indexOf('1 mutant(s) on changed lines survived'));
+});
+
 test('summarize lists new survivors with ledger entries, and untested scripts', () => {
     const clean = summarize([], [SURVIVOR]);
     assert.match(clean, /No new surviving mutants \(1 accepted in the ledger\)/);
@@ -646,6 +721,14 @@ test('exits 2 on a malformed ledger, a missing report and bad arguments', () => 
         const noStryker = run(['--stryker', '--dry-run'], dir);
         assert.equal(noStryker.status, 2);
         assert.match(noStryker.stderr, /--stryker needs a value/);
+        for (const v of ['ten', '-1', '1e3', '']) {
+            const budget = run(['--report', 'r.json', '--budget-minutes', v], dir);
+            assert.equal(budget.status, 2, v);
+            assert.match(budget.stderr, /--budget-minutes needs a number of minutes, not /, v);
+        }
+        assert.equal(run(['--report', 'r.json', '--budget-minutes', '0'], dir).status, 0);
+        assert.equal(run(['--report', 'r.json', '--budget-minutes', '12'], dir).status, 0);
+        assert.equal(run(['--report', 'r.json', '--budget-minutes', '2.25'], dir).status, 0);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
@@ -772,7 +855,8 @@ test('--base defaults to origin/main and --root sets the repository', () => {
 // A stand-in for the Stryker binary: it records how it was started, prints a
 // line, and then does what FAKE_STRYKER says.
 const FAKE_STRYKER = `
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { dirname } from 'node:path';
 writeFileSync('stryker-call.json', JSON.stringify({
     argv: process.argv.slice(2),
@@ -780,8 +864,23 @@ writeFileSync('stryker-call.json', JSON.stringify({
     report: process.env.MUTATION_REPORT,
     path: process.env.PATH,
 }));
+appendFileSync('stryker-calls.log', process.env.MUTATION_REPORT + '\\n');
 console.log('fake stryker ran');
-const mode = process.env.FAKE_STRYKER;
+let mode = process.env.FAKE_STRYKER;
+if (mode === 'survivor-then-hang') {
+    mode = readFileSync('stryker-calls.log', 'utf8').trim().split('\\n').length === 1 ? 'survivor' : 'hang';
+}
+if (mode === 'hang' || mode === 'hang-before-sandbox') {
+    // What a stopped run leaves: Stryker's sandbox and a test command that
+    // Stryker started, which only a kill of the whole group stops. Like
+    // node --test, the test command does not stop on SIGTERM.
+    if (mode === 'hang') mkdirSync('.stryker-tmp/sandbox-1', { recursive: true });
+    const test = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setTimeout(() => {}, 60000)'], {
+        stdio: 'ignore',
+    });
+    writeFileSync('test-pid', String(test.pid));
+    setTimeout(() => {}, 60000);
+}
 if (mode === 'exit') process.exit(3);
 if (mode === 'survivor' || mode === 'broken') {
     mkdirSync(dirname(process.env.MUTATION_REPORT), { recursive: true });
@@ -850,5 +949,147 @@ test('exits 2 when Stryker fails or writes an unreadable report', () => {
         assert.match(broken.stderr, /cannot read Stryker report .*scripts-tool\.json: /);
     } finally {
         rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+// scripts/tool.mjs with lines 1 and 3-25 changed: two runs, since 1 + 23
+// lines are more than CHUNK_LINES.
+function splitRepo() {
+    const dir = repo();
+    commit(dir, { 'scripts/tool.mjs': `a();\nexport const t = 1;\n${'b();\n'.repeat(23)}` });
+    writeFileSync(join(dir, 'fake-stryker.mjs'), FAKE_STRYKER);
+    return dir;
+}
+
+const budgetRun = (dir, mode, minutes) =>
+    run(['--root', dir, '--base', 'main', '--stryker', 'fake-stryker.mjs', '--budget-minutes', minutes], tmpdir(), {
+        FAKE_STRYKER: mode,
+    });
+
+async function gone(pid) {
+    // A killed process can stay a zombie for a moment until it is reaped.
+    for (let i = 0; i < 40; i++) {
+        try {
+            process.kill(pid, 0);
+        } catch (e) {
+            if (e.code === 'ESRCH') return true;
+            throw e;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+    }
+    return false;
+}
+
+test('when the budget runs out it stops the whole run, removes the sandbox and lists the lines not checked', async () => {
+    const dir = splitRepo();
+    try {
+        const r = budgetRun(dir, 'hang', '0.1');
+        assert.equal(r.status, 1, r.stdout + r.stderr);
+        assert.match(r.stdout, /== scripts-tool-1: stopped, the time budget ran out/);
+        assert.match(
+            r.stdout,
+            /The 0\.1-minute time budget ran out before these changed lines were checked; .*\n\n- scripts\/tool\.mjs:1-1\n- scripts\/tool\.mjs:3-25\n/,
+        );
+        // The second run never started: the budget was gone.
+        assert.equal(readFileSync(join(dir, 'stryker-calls.log'), 'utf8'), 'reports/mutation/scripts-tool-1.json\n');
+        assert.doesNotMatch(r.stdout, /scripts-tool-2/);
+        assert.equal(existsSync(join(dir, STRYKER_TMP)), false);
+        assert.ok(await gone(Number(readFileSync(join(dir, 'test-pid'), 'utf8'))), 'the test Stryker started still runs');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('a run stopped before Stryker made its sandbox is reported the same way', async () => {
+    const dir = splitRepo();
+    try {
+        const r = budgetRun(dir, 'hang-before-sandbox', '0.1');
+        assert.equal(r.status, 1, r.stdout + r.stderr);
+        assert.match(r.stdout, /== scripts-tool-1: stopped, the time budget ran out/);
+        assert.match(r.stdout, /\n- scripts\/tool\.mjs:1-1\n- scripts\/tool\.mjs:3-25\n/);
+        assert.ok(await gone(Number(readFileSync(join(dir, 'test-pid'), 'utf8'))));
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('runs finished before the budget ran out are still reported', async () => {
+    const dir = splitRepo();
+    try {
+        const r = budgetRun(dir, 'survivor-then-hang', '0.1');
+        assert.equal(r.status, 1, r.stdout + r.stderr);
+        assert.equal(
+            readFileSync(join(dir, 'stryker-calls.log'), 'utf8'),
+            'reports/mutation/scripts-tool-1.json\nreports/mutation/scripts-tool-2.json\n',
+        );
+        assert.match(r.stdout, /== scripts-tool-2: stopped, the time budget ran out/);
+        assert.match(r.stdout, /\n- scripts\/tool\.mjs:3-25\n/);
+        assert.doesNotMatch(r.stdout, /\n- scripts\/tool\.mjs:1-1\n/);
+        assert.match(r.stdout, /1 mutant\(s\) on changed lines survived/);
+        assert.match(r.stdout, /scripts\/tool\.mjs:2:12 EqualityOperator \(Survived\)/);
+        assert.ok(await gone(Number(readFileSync(join(dir, 'test-pid'), 'utf8'))));
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('with --budget-minutes 0 there is no budget, and each run of a split group gets its own report', () => {
+    const dir = splitRepo();
+    try {
+        const r = budgetRun(dir, 'none', '0');
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.equal(
+            readFileSync(join(dir, 'stryker-calls.log'), 'utf8'),
+            'reports/mutation/scripts-tool-1.json\nreports/mutation/scripts-tool-2.json\n',
+        );
+        assert.doesNotMatch(r.stdout, /budget/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('many runs in a row leave no signal handler behind', () => {
+    const dir = repo();
+    try {
+        // Twelve 20-line ranges, each its own run: a block added above each
+        // of twelve lines main already has.
+        const keep = Array.from({ length: 12 }, (_, i) => `export const k${i} = ${i};\n`);
+        git(dir, 'checkout', '-q', 'main');
+        commit(dir, { 'scripts/tool.mjs': keep.join('') });
+        git(dir, 'checkout', '-q', 'pr');
+        git(dir, 'merge', '-q', 'main');
+        commit(dir, { 'scripts/tool.mjs': keep.map((k) => 'x();\n'.repeat(20) + k).join('') });
+        writeFileSync(join(dir, 'fake-stryker.mjs'), FAKE_STRYKER);
+        const r = budgetRun(dir, 'none', '5');
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.equal(readFileSync(join(dir, 'stryker-calls.log'), 'utf8').trim().split('\n').length, 12);
+        assert.doesNotMatch(r.stderr, /MaxListenersExceeded/);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('a SIGTERM or Ctrl-C stops Stryker and the tests it started, not just this script', async () => {
+    for (const [signal, code] of [['SIGTERM', 143], ['SIGINT', 130]]) {
+        const dir = splitRepo();
+        try {
+            const env = { ...process.env, FAKE_STRYKER: 'hang' };
+            delete env.GITHUB_STEP_SUMMARY;
+            const child = spawn(
+                process.execPath,
+                [SCRIPT, '--root', dir, '--base', 'main', '--stryker', 'fake-stryker.mjs', '--budget-minutes', '0'],
+                { cwd: tmpdir(), env, stdio: 'ignore' },
+            );
+            const exited = new Promise((done) => child.once('exit', (status) => done(status)));
+            const pidFile = join(dir, 'test-pid');
+            for (let i = 0; i < 200 && !existsSync(pidFile); i++) await new Promise((r) => setTimeout(r, 50));
+            await new Promise((r) => setTimeout(r, 50));
+            const testPid = Number(readFileSync(pidFile, 'utf8'));
+            child.kill(signal);
+            assert.equal(await exited, code, signal);
+            assert.ok(await gone(testPid), `${signal}: the test Stryker started still runs`);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     }
 });
