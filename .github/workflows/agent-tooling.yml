@@ -56,7 +56,7 @@ jobs:
     name: Mutation check on changed lines (advisory)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     continue-on-error: true
     steps:
       - name: Checkout code
@@ -76,4 +76,4 @@ jobs:
       - name: Mutate changed lines
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: node scripts/mutation-check.mjs --base "origin/$BASE_REF" --stryker "$RUNNER_TEMP/stryker/node_modules/.bin/stryker"
+        run: node scripts/mutation-check.mjs --base "origin/$BASE_REF" --stryker "$RUNNER_TEMP/stryker/node_modules/.bin/stryker" --budget-minutes 110

@@ -21,6 +21,34 @@
             "original": "process.env.GITHUB_STEP_SUMMARY",
             "replacement": "true",
             "reason": "Equivalent: with GITHUB_STEP_SUMMARY unset, appendFileSync(undefined) throws and the catch ignores it, so nothing is written either way and the exit status does not change."
+        },
+        {
+            "file": "scripts/mutation-check.mjs",
+            "mutator": "StringLiteral",
+            "original": "'error'",
+            "replacement": "\"\"",
+            "reason": "Equivalent: the only program spawned is process.execPath, the running Node binary, with a cwd git diff has just run in, so spawn never emits 'error' and the handler never runs. It stays so a failed start ends the check with exit 2 instead of an unhandled 'error' crash."
+        },
+        {
+            "file": "scripts/mutation-check.mjs",
+            "mutator": "ArrowFunction",
+            "original": "(error) => done({ status: null, signal: error.code })",
+            "replacement": "() => undefined",
+            "reason": "Equivalent: the only program spawned is process.execPath, the running Node binary, with a cwd git diff has just run in, so spawn never emits 'error' and the handler never runs. It stays so a failed start ends the check with exit 2 instead of an unhandled 'error' crash."
+        },
+        {
+            "file": "scripts/mutation-check.mjs",
+            "mutator": "ObjectLiteral",
+            "original": "{ status: null, signal: error.code }",
+            "replacement": "{}",
+            "reason": "Equivalent: the only program spawned is process.execPath, the running Node binary, with a cwd git diff has just run in, so spawn never emits 'error' and the handler never runs. It stays so a failed start ends the check with exit 2 instead of an unhandled 'error' crash."
+        },
+        {
+            "file": "scripts/mutation-check.mjs",
+            "mutator": "EqualityOperator",
+            "original": "Date.now() < deadline",
+            "replacement": "Date.now() <= deadline",
+            "reason": "Equivalent: they differ only in the one millisecond where the clock equals the deadline. A run started then is stopped at once by its zero-delay timer, so its lines are listed as not checked either way."
         }
     ]
 }
