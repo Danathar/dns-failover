@@ -209,6 +209,10 @@ const allowed = [
     "env -a '-Sgit push --force' git status",
     'nice --adj 5 shellcheck monitor.py',
     'env -iu X python3 -m pytest',
+    // a case statement inside a substitution: its pattern's `)` does not end it
+    'echo "$(case a in a) echo hi;; esac) done"',
+    'x=$(case a in (a) echo hi;; b|c) echo no;& d) echo x;;& esac); echo "$x"',
+    'echo $(echo case a in a) git push --force origin main',
 ];
 
 const blocked = [
@@ -455,6 +459,19 @@ const blocked = [
     ["bash -c 'shopt -s extglob\n/usr/bin/g@\\\n(i)t push --force origin main'", 'force'],
     ["bash -O extglob -c 's@\\\n(u)do id'", 'privilege escalation'],
     ["bash -O extglob -c 'gh@\\\n() pr merge 1'", 'gh pr merge'],
+    // a case pattern's `)` inside a substitution is not the substitution's end
+    ['echo $(case a in a) git push --force origin main;; esac)', 'force'],
+    ['echo "$(case a in a) sudo id;; esac)"', 'privilege escalation'],
+    ['echo $(case a in (a) gh pr merge 1;; esac)', 'gh pr merge'],
+    ['echo $(case a in b) true;; a|c) git push --force origin main;; esac)', 'force'],
+    ['echo $(case a in b) true;& a) sudo id;;& esac)', 'privilege escalation'],
+    ['echo $(if true; then case a in a) sudo id;; esac; fi)', 'privilege escalation'],
+    ['echo $(case a in a) case b in b) true;; esac; sudo id;; esac)', 'privilege escalation'],
+    ['echo $(case $(echo a) in a) sudo id;; esac)', 'privilege escalation'],
+    // `esac` after `|` or `(` in a pattern list is a pattern, not the case's end
+    ['echo $(case esac in a|esac) sudo id;; esac)', 'privilege escalation'],
+    ['echo $(case esac in a | esac) git push --force origin main;; esac)', 'force'],
+    ['echo $(case esac in (a|esac) gh pr merge 1;; esac)', 'gh pr merge'],
 ];
 
 // ---------------------------------------------------------------------------
