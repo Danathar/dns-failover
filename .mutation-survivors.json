@@ -49,6 +49,153 @@
             "original": "Date.now() < deadline",
             "replacement": "Date.now() <= deadline",
             "reason": "Equivalent: they differ only in the one millisecond where the clock equals the deadline. A run started then is stopped at once by its zero-delay timer, so its lines are listed as not checked either way."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ArrayDeclaration",
+            "original": "[]",
+            "replacement": "[\"Stryker was here\"]",
+            "reason": "closeParen() (akmods#215 reader): equivalent for `const cases = []`. A string at the bottom of the stack has no depth, so it is never the case at the current depth and the pop loop stops at it; every real case is pushed above it and read as before."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "BooleanLiteral",
+            "original": "false",
+            "replacement": "true",
+            "reason": "closeParen() (akmods#215 reader): equivalent at each of its false literals. `let wordAtCommand = false` is overwritten by the first character of every word before it is read. `atCommand = false` after a case subject word, after `case` and after `esac`: subject and pattern words never read atCommand, the `)` that ends a pattern sets it again, and after `esac` bash allows only an operator or a redirection, so no case can open there on a line bash runs. `plain = false` and the false isPlain arguments: a word that is not plain always holds the backslash, quote or `$'` text that marks it, so it can never equal `case`, `esac`, `in` or a reserved word anyway."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "word === 'in'",
+            "replacement": "true",
+            "reason": "closeParen() (akmods#215 reader): equivalent on lines bash runs: the second word of a case subject is always `in`; any other word there is a syntax error, so bash runs nothing."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "top.state === 'pattern'",
+            "replacement": "true",
+            "reason": "closeParen() (akmods#215 reader): equivalent in the `esac` test: subject words are handled by the branch before it, and in a clause body patternRead is always true (the `)` that starts a body follows a pattern word or a `(`; `case a in ) b;; esac` is a syntax error)."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "top.state === 'body' && wordAtCommand",
+            "replacement": "false",
+            "reason": "closeParen() (akmods#215 reader): equivalent on lines bash runs: a case left open in a clause body reads every word and separator as no case does, except `;;`, `;&` and `;;&`, which bash allows only inside a case. Those then belong to an enclosing case, and the stale case takes its place one level down, so each `)` still ends the same pattern or the same substitution."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "StringLiteral",
+            "original": "'body'",
+            "replacement": "\"\"",
+            "reason": "closeParen() (akmods#215 reader): equivalent in the `esac` test: no case is ever in state \"\", so this is the same as dropping the clause-body arm, which is accepted above (`top.state === 'body' && wordAtCommand` -> false)."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "word === ''",
+            "replacement": "true",
+            "reason": "closeParen() (akmods#215 reader): equivalent in addToWord(): atCommand changes only in endWord() and at separators, and a word ends at every separator, so it holds the same value at every character of a word as at its first."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "!isPlain",
+            "replacement": "false",
+            "reason": "closeParen() (akmods#215 reader): equivalent: a word that is not plain always holds the backslash, quote or `$'` text that marks it, so it can never equal `case`, `esac`, `in` or a reserved word anyway."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "input[j + 2] !== '<'",
+            "replacement": "true",
+            "reason": "closeParen() (akmods#215 reader): not a weakening. With the check gone, `<<<` goes to readHeredocStart(), which finds no delimiter (the third `<` stops it), queues nothing, and resumes past the second `<`, so the here-string is skipped as bash does. The original instead reads the second and third `<` as a heredoc `<<word`, so `$(cat <<<x` + newline reads on to a line `x`; that only lengthens the body, which the guard still reads as commands (checked: `echo $(cat <<<x\\n)\\nsudo id\\nx` is refused). A test cannot kill this without pinning that over-read."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ArithmeticOperator",
+            "original": "j + 2",
+            "replacement": "j - 2",
+            "reason": "closeParen() (akmods#215 reader): same as `input[j + 2] !== '<'` -> true for the heredoc test (input[j - 2] is never the third `<` of `<<<`): not a weakening, see that entry."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "StringLiteral",
+            "original": "'<'",
+            "replacement": "\"\"",
+            "reason": "closeParen() (akmods#215 reader): same as `input[j + 2] !== '<'` -> true for the heredoc test (no character is \"\"): not a weakening, see that entry."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "CallExpression",
+            "original": "endWord();",
+            "replacement": ";",
+            "reason": "closeParen() (akmods#215 reader): equivalent before a `<<` heredoc start: readHeredocStart() stops at a separator or the end of the input, and the separator ends the pending word with the same state, since reading the heredoc start changes neither the word nor atCommand."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "top.depth === depth",
+            "replacement": "true",
+            "reason": "closeParen() (akmods#215 reader): equivalent on lines bash runs, in the separator branch: a `)` inside a substitution or group in a case pattern (`case a in $(echo a)) b;; esac`) is read as the pattern's end and the pattern's own `)` as closing that inner level, so depth and case state agree again after the pattern. Words in between use endWord()'s own depth test, and `;;` cannot appear there."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "cases.length && cases.at(-1).depth > depth",
+            "replacement": "false",
+            "reason": "closeParen() (akmods#215 reader): equivalent on lines bash runs: a case still open when the `)` of its own level closes is unterminated, a syntax error. The pop itself is covered: the `$( (case a in a) b) )` row hangs without it."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "top.state === 'body'",
+            "replacement": "true",
+            "reason": "closeParen() (akmods#215 reader): equivalent in the `;;` test: a `;` followed by `;` or `&` at a case's own depth outside a clause body is either the second `;` of a terminator just read or a syntax error, and resetting the pattern state there changes nothing."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "input[j + 1] === ';' && input[j + 2] === '&'",
+            "replacement": "false",
+            "reason": "closeParen() (akmods#215 reader): equivalent: it only decides whether the `&` of `;;&` is skipped. Read instead, it is a separator in pattern state, which sets atCommand, and pattern reading never reads atCommand."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "input[j + 1] === ';'",
+            "replacement": "true",
+            "reason": "closeParen() (akmods#215 reader): equivalent in the `;;&` skip: it only changes how many terminator characters are skipped, and an unskipped `;` or `&` is a separator in pattern state, which only sets atCommand (never read there)."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "EqualityOperator",
+            "original": "input[j + 1] === ';'",
+            "replacement": "input[j + 1] !== ';'",
+            "reason": "closeParen() (akmods#215 reader): equivalent in the `;;&` skip, as for `input[j + 1] === ';'` -> true: it only changes whether one more `;` or `&` separator is read in pattern state."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "ArithmeticOperator",
+            "original": "j + 1",
+            "replacement": "j - 1",
+            "reason": "closeParen() (akmods#215 reader): equivalent in the `;;&` skip, as for `input[j + 1] === ';'` -> true: it only changes whether one more `;` or `&` separator is read in pattern state."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "StringLiteral",
+            "original": "';'",
+            "replacement": "\"\"",
+            "reason": "closeParen() (akmods#215 reader): equivalent in the `;;&` skip, as for `input[j + 1] === ';'` -> true: it only changes whether one more `;` or `&` separator is read in pattern state."
+        },
+        {
+            "file": ".claude/hooks/shell-reader.mjs",
+            "mutator": "StringLiteral",
+            "original": "'&'",
+            "replacement": "\"\"",
+            "reason": "closeParen() (akmods#215 reader): equivalent in the `;;&` skip, as for `input[j + 1] === ';'` -> true: it only changes whether one more `;` or `&` separator is read in pattern state."
         }
     ]
 }
