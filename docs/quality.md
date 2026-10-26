@@ -67,9 +67,9 @@ changes (#134).
   45-minute CI job may run; the first such pull request (#140) was cancelled with no result at all (#142).
   So a test command's changed lines are split into Stryker runs of about 20 lines (whole `git diff` ranges,
   never cut: Stryker only mutates code that lies wholly inside one range), and after `--budget-minutes`
-  (default 40) the check stops Stryker and the tests it started. The runs it finished are reported as usual;
-  the lines it did not reach are listed as not checked. `--budget-minutes 0` turns the budget off for a hand
-  run.
+  (default 40; the CI job passes 110 inside its 120-minute limit) the check stops Stryker and the tests it
+  started. The runs it finished are reported as usual; the lines it did not reach are listed as not checked.
+  `--budget-minutes 0` turns the budget off for a hand run.
 - **In CI:** the advisory `Mutation check on changed lines (advisory)` job that runs it on each pull request
   is the `mutation` job in [`agent-tooling.yml`](../.github/workflows/agent-tooling.yml). It is
   `continue-on-error`, pull requests only, and never a required check.
