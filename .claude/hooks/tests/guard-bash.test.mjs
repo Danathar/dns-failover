@@ -16,6 +16,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { closeParen } from '../shell-reader.mjs';
 
 const HOOK = fileURLToPath(new URL('../guard-bash.mjs', import.meta.url));
 
@@ -209,6 +210,10 @@ const allowed = [
     "env -a '-Sgit push --force' git status",
     'nice --adj 5 shellcheck monitor.py',
     'env -iu X python3 -m pytest',
+    // a case statement inside a substitution: its pattern's `)` does not end it
+    'echo "$(case a in a) echo hi;; esac) done"',
+    'x=$(case a in (a) echo hi;; b|c) echo no;& d) echo x;;& esac); echo "$x"',
+    'echo $(echo case a in a) git push --force origin main',
 ];
 
 const blocked = [
@@ -455,6 +460,19 @@ const blocked = [
     ["bash -c 'shopt -s extglob\n/usr/bin/g@\\\n(i)t push --force origin main'", 'force'],
     ["bash -O extglob -c 's@\\\n(u)do id'", 'privilege escalation'],
     ["bash -O extglob -c 'gh@\\\n() pr merge 1'", 'gh pr merge'],
+    // a case pattern's `)` inside a substitution is not the substitution's end
+    ['echo $(case a in a) git push --force origin main;; esac)', 'force'],
+    ['echo "$(case a in a) sudo id;; esac)"', 'privilege escalation'],
+    ['echo $(case a in (a) gh pr merge 1;; esac)', 'gh pr merge'],
+    ['echo $(case a in b) true;; a|c) git push --force origin main;; esac)', 'force'],
+    ['echo $(case a in b) true;& a) sudo id;;& esac)', 'privilege escalation'],
+    ['echo $(if true; then case a in a) sudo id;; esac; fi)', 'privilege escalation'],
+    ['echo $(case a in a) case b in b) true;; esac; sudo id;; esac)', 'privilege escalation'],
+    ['echo $(case $(echo a) in a) sudo id;; esac)', 'privilege escalation'],
+    // `esac` after `|` or `(` in a pattern list is a pattern, not the case's end
+    ['echo $(case esac in a|esac) sudo id;; esac)', 'privilege escalation'],
+    ['echo $(case esac in a | esac) git push --force origin main;; esac)', 'force'],
+    ['echo $(case esac in (a|esac) gh pr merge 1;; esac)', 'gh pr merge'],
 ];
 
 // ---------------------------------------------------------------------------
@@ -1392,3 +1410,119 @@ test('an internal error fails closed (exit 2), not open', () => {
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /internal error \(boom\); blocking \(fail closed\)/);
 });
+
+// closeParen() decides where a `$(...)`, `<(...)` or `>(...)` body ends. Run
+// through the hook, most wrong readings only lengthen the body and the guard
+// still refuses, so the cases above cannot tell them apart; the mutation check
+// (scripts/mutation-check.mjs) found 127 such mutants in the akmods#215 reader.
+// Each row is a body that starts with `$(` and the text after its `)`, which
+// closeParen() must not read into.
+const closeParenRows = [
+    // Parens in quotes, escaped, or in a heredoc body do not count; a `<` that
+    // is not `<<` does not start one.
+    ['$(echo ")")', ' x'],
+    ["$(echo ')')", ' x'],
+    ['$(echo "\\")")', ' x'],
+    ["$(echo '\\')", ' x)'],
+    ['$(echo \\))', ' x'],
+    ["$(echo $'\\')')", ' x'],
+    ["$(echo $'a)b')", ' x'],
+    ['$(cat <<E\n)\nE\n)', ' x'],
+    ['$(cat <<E; cat <<F\n)\nE\n)\nF\n)', ' x'],
+    ['$(cat <<<x)', ' y)'],
+    ['$(cat <<E)', '\n)\nE\n'],
+    ['$( (echo a) )', ' x)'],
+    ['$(echo a; (b); c)', ' x)'],
+    ['$(cat<<E\n)\nE\n)', ' x'],
+    ['$(cat x<<E\n)\nE\n)', ' x'],
+    ['$(cat <E)', ' x)'],
+    ['$(cat<E)', ' x)'],
+    ['$(cat <E\n)', '\nE\n)'],
+    ['$(cat <ab\n)', '\nb\nab\n)'],
+    // A `case` at a command position: a pattern's `)` stays inside.
+    ['$(case a in a) b;; esac)', ' x) y'],
+    ['$(case a in (a) b;; esac)', ' x) y'],
+    ['$(case a in (a|b) c;; esac)', ' x) y'],
+    ['$(case a in a) b;; c) d;; esac)', ' x) y'],
+    ['$(case a in a) b;& c) d;; esac)', ' x) y'],
+    ['$(case a in a) b;;& c) d;; esac)', ' x) y'],
+    ['$(case a in a) b; c;; d) e;; esac)', ' x) y'],
+    ['$(case a in a) b & c;; d) e;; esac)', ' x) y'],
+    ['$(case a in a) b\n;; d) e;; esac)', ' x) y'],
+    ['$(case a in a|esac) b;; esac)', ' x) y'],
+    ['$(case a in a | esac) b;; esac)', ' x) y'],
+    ['$(case a in (esac) b;; esac)', ' x) y'],
+    ['$(case a in "esac") b;; esac)', ' x) y'],
+    ['$(case a in a) echo esac;; b) c;; esac)', ' x) y'],
+    ['$(case a in a) b;; esac; case c in c) d;; esac)', ' x) y'],
+    ['$(case a in a) \\esac;; b) c;; esac)', ' x) y'],
+    ['$(case a in a) "esac";; b) c;; esac)', ' x) y'],
+    ['$(case a in a) b;; esac\n)', ' x) y'],
+    ['$(case a in a) b;; esac )', ' x) y'],
+    ['$(case a in a) case b in b) c;; esac;; d) e;; esac)', ' x) y'],
+    ['$(case $(echo a) in a) b;; esac)', ' x) y'],
+    ['$(case $(case a in a) b;; esac) in a) b;; esac)', ' x) y'],
+    ['$(case a in a) (echo b); c;; d) e;; esac)', ' x) y'],
+    ['$(case in in esac)', ' b;; esac)'],
+    ['$(case a in a) b;;& esac)', ' x) y'],
+    ['$(case a in a) b;& esac)', ' x) y'],
+    ['$(case a in a) b;;&(c) d;; esac)', ' x) y'],
+    ['$(case a in a) b;&(c) d;; esac)', ' x) y'],
+    ['$(case a in a) b;;(c) d;; esac)', ' x) y'],
+    ['$(case a in a) cat <<E;; d) e;; esac\n)\nE\n)', ' x) y'],
+    ['$(case in in in) b;; esac)', ' x) y'],
+    ['$(case a\nin a) b;; esac)', ' x) y'],
+    ['$(case "a" in a) b;; esac)', ' x) y'],
+    ['$(case \\a in a) b;; esac)', ' x) y'],
+    ["$(case $'a' in a) b;; esac)", ' x) y'],
+    ['$(case a in a) b;;esac)', ' x) y'],
+    ['$(case a in\na) b;;\nesac)', ' x) y'],
+    ['$(case a in a)b;; esac)', ' x) y'],
+    ['$(case a in $(echo a)) b;; esac)', ' x) y'],
+    ['$(case a in a) b && c;; esac)', ' x) y'],
+    ['$(case a in a) b; c;; esac)', ' x) y'],
+    ['$(case a in a) b & ;;esac)', ' x) y'],
+    ['$(cat <<E; true\nx\nE\ncase a in a) b;; esac)', ' x) y'],
+    // The word after these reserved words is at a command position too.
+    ['$(! case a in a) b;; esac)', ' x) y'],
+    ['$({ case a in a) b;; esac; })', ' x) y'],
+    ['$(if case a in a) b;; esac; then :; fi)', ' x) y'],
+    ['$(if :; then case a in a) b;; esac; fi)', ' x) y'],
+    ['$(if :; then :; else case a in a) b;; esac; fi)', ' x) y'],
+    ['$(if :; then :; elif case a in a) b;; esac; then :; fi)', ' x) y'],
+    ['$(for i in j; do case a in a) b;; esac; done)', ' x) y'],
+    ['$(while case a in a) b;; esac; do :; done)', ' x) y'],
+    ['$(until case a in a) b;; esac; do :; done)', ' x) y'],
+    ['$(time case a in a) b;; esac)', ' x) y'],
+    ['$(:;case a in a) b;; esac)', ' x) y'],
+    ['$(: & case a in a) b;; esac)', ' x) y'],
+    ['$(: | case a in a) b;; esac)', ' x) y'],
+    ['$(:\ncase a in a) b;; esac)', ' x) y'],
+    ['$( (case a in a) b;; esac) )', ' x) y'],
+    ['$(cat <<E\nx\nE\ncase a in a) b;; esac)', ' x) y'],
+    ['$(\tcase a in a) b;; esac)', ' x) y'],
+    // Anywhere else `case` is a plain word, and the first `)` closes.
+    ['$(echo case a in a)', ' b;; esac)'],
+    ['$(echo\tcase a in a)', ' b;; esac)'],
+    ['$(echo >case a in a)', ' b;; esac)'],
+    ['$(cat <case a in a)', ' b;; esac)'],
+    ['$("case" a in a)', ' b;; esac)'],
+    ['$(\\case a in a)', ' b;; esac)'],
+    ['$(echo if case a in a)', ' b;; esac)'],
+    ['$("if" case a in a)', ' b;; esac)'],
+    ['$(echo then case a in a)', ' b;; esac)'],
+    ['$( (:); case a in a) b;; esac)', ' x) y'],
+    ['$(:; casex a in a)', ' b;; esac)'],
+    ['$(case a in a) b;; esac; echo esac)', ' x'],
+    ['$(\\  case a in a)', ' b;; esac)'],
+    ["$($'' case a in a)", ' b;; esac)'],
+    ['$(echo $(:)case a in a)', ' b;; esac)'],
+    // bash rejects an unterminated case; the reader still stops where the parens close.
+    ['$( (case a in a) b) )', ' x'],
+];
+
+for (const [body, rest] of closeParenRows) {
+    test(`closeParen ends ${JSON.stringify(body)} at its last \`)\``, () => {
+        assert.equal(closeParen(body + rest, 2), body.length);
+    });
+}
