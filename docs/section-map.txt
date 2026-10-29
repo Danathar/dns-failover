@@ -1,0 +1,257 @@
+# Docs section map: every section of every tracked documentation page, and
+# whether a test reads it.
+#
+# A page lists here as [path]. Under it, every `##` and `###` heading of that
+# page, written exactly as the page writes it, followed by one indented line:
+#
+#   joined: <test file>    that test reads what this section states
+#   prose: <reason>        no test reads it, and this says why that is fine,
+#                          or names what is left unchecked
+#
+# scripts/tests/docs-section-map.test.mjs fails when a tracked page has a
+# heading with no row here, when a row names a heading the page no longer has,
+# or when a `joined:` file is not a test CI runs or never opens the page. It
+# does not prove any sentence true. What it changes is that a section of claims
+# about the code or the automation that nothing checks is a visible
+# `prose: unchecked` line in the diff that adds it, instead of the silent
+# default.
+#
+# `prose: unchecked:` marks a section that states facts about the machine (the
+# scripts, a workflow, the settings file, the Bash guard, the ruleset) that no
+# test reads. Each is a candidate for a join test; turning it into `joined:` is
+# the fix. `prose: narrative:` marks a section that states no such fact.
+#
+# Tracked pages: every tracked Markdown file at the repository root, in docs/
+# and in docs/security/ (not the dated metrics, agent-task and reflection
+# ledgers), plus .github/copilot-instructions.md. A new page in one of those
+# places has to be added here in the change that adds it.
+
+[.github/copilot-instructions.md]
+
+[AGENTS.md]
+## What this repo is
+  prose: unchecked: table of what each script and unit file does
+## Host rule (hard rule)
+  prose: unchecked: the commands the host rule forbids; .claude/hooks/tests/settings.test.mjs holds the deny rules, not this text
+## Other hard rules
+  prose: unchecked: installer, monitor and commit rules
+## Testing and checks
+  prose: unchecked: the check commands and the workflows that run them
+## Risk tiers
+  prose: unchecked: summary of docs/risk-tiers.md
+## Where things go
+  prose: unchecked: table of where agent files live
+## Session continuity
+  prose: narrative: where session state is written
+## Pull requests
+  prose: narrative: how to write a pull request
+
+[CLAUDE.md]
+## Claude Code notes
+  prose: unchecked: names the settings file, the Bash guard and the skills
+
+[CONTRIBUTING.md]
+## Ground rules
+  prose: narrative: the host rule restated for contributors
+## Setup
+  prose: unchecked: the packages and versions a contributor installs
+## Before you open a PR
+  prose: unchecked: the check commands
+## Commits and PRs
+  prose: narrative: commit message and pull request conventions
+## Reporting bugs and requesting features
+  prose: narrative: where to report
+
+[README.md]
+## What it does
+  prose: unchecked: the failover behaviour of the scripts
+## The seven scripts
+  prose: unchecked: table of the scripts
+## Supporting files
+  prose: unchecked: table of the unit and config files
+## Requirements and installation
+  prose: narrative: what the host needs
+### 1. Configure the primary resolver
+  prose: unchecked: dnsmasq settings the installer expects
+### 2. Prepare and install local DNS failover
+  prose: unchecked: installer steps
+### 3. Optionally enable Tailscale failover
+  prose: unchecked: configure.py and monitor steps
+## Check local DNS operation
+  prose: unchecked: operator commands and the files the timer writes
+## Troubleshooting
+  prose: unchecked: symptoms and the files to look at
+## Run tests
+  prose: unchecked: the check commands
+## What was removed for sharing
+  prose: narrative: which site values were replaced by placeholders
+## Maintained with Hive (ACMM L6)
+  prose: narrative: who maintains the repository
+## About this project
+  prose: narrative: history
+## License
+  prose: narrative: the licence
+
+[docs/agent-boundaries.md]
+## By tier
+  joined: scripts/tests/agent-boundary-lists.test.mjs
+## Who owns what
+  prose: unchecked: CODEOWNERS shape; scripts/check-policies.mjs enforces it, but no test reads this text
+## Always off limits
+  prose: unchecked: the host rule and the owner-only actions
+## Files that bound agents
+  joined: scripts/tests/agent-boundary-lists.test.mjs
+
+[docs/ai-ops-runbook.md]
+## Pause and resume the repository in Hive
+  prose: narrative: owner steps in Hive
+## What each workflow does, and how to turn it off
+  prose: unchecked: what each workflow runs and when
+### Reading audit, metrics and nightly output
+  prose: unchecked: where each workflow writes its output
+## A red `main`
+  prose: unchecked: job names and the commands to reproduce them
+## An agent pull request touches Tier 1
+  prose: narrative: owner steps
+## A bad change reached the DNS server
+  prose: unchecked: the backup path and restore steps of the installer
+## A leaked secret
+  prose: narrative: rotation steps
+## A runaway agent
+  prose: narrative: owner steps
+## A scheduled run did not fire
+  prose: unchecked: the scheduled workflows
+## The product's own operational signals
+  prose: unchecked: the files and logs the timers write
+
+[docs/branch-protection.md]
+## Status
+  prose: unchecked: what the live ruleset holds
+## Why
+  prose: narrative: why main is protected
+## The ruleset
+  prose: unchecked: the required checks and their job names
+## Merge queue (issue #42)
+  prose: narrative: the merge strategy decision
+## Applying or changing the ruleset
+  prose: narrative: owner steps
+### Renaming a required check
+  prose: narrative: owner steps
+## When there is a second reviewer
+  prose: narrative: future change
+
+[docs/metrics.md]
+## What is computed
+  prose: unchecked: what scripts/pr-metrics.mjs computes
+## Run it locally
+  prose: unchecked: the metrics command and its options
+## Weekly run
+  prose: unchecked: what the PR metrics workflow runs
+## How to read the numbers
+  prose: narrative: interpretation
+## Not measured
+  prose: narrative: what the metrics leave out
+
+[docs/multi-agent.md]
+## Rule 1: the host rule
+  prose: narrative: the host rule restated
+## There is no dispatcher in this repository
+  prose: unchecked: which workflows start agents
+## Who works here
+  prose: narrative: the agents and their roles
+## How work reaches an agent
+  prose: unchecked: the triggers of the agent workflows
+## What keeps agents from colliding
+  prose: unchecked: concurrency groups and branch names of the agent workflows
+## Who decides what lands
+  prose: narrative: review and merge roles
+## If you are an agent
+  prose: narrative: instructions to agents
+
+[docs/quality.md]
+## Signals
+  prose: unchecked: table of checks, their workflows and whether each is required
+## Mutation check on changed lines
+  prose: unchecked: what scripts/mutation-check.mjs mutates, its budget and its timeout
+## How to read a red signal
+  prose: unchecked: job names and the commands to reproduce them
+## Where to look
+  prose: unchecked: gh commands for runs and pull requests
+## Known weak spots
+  prose: narrative: the gaps the owner accepts
+
+[docs/review-rubric.md]
+## Severity levels
+  prose: narrative: severity definitions
+## 1. Scope, tier and the host rule
+  prose: narrative: review questions
+## 2. Failover correctness: `dns-upstream-check.py`
+  prose: unchecked: the failover rules the local monitor keeps
+## 3. Tailscale override ownership: `monitor.py` and `configure.py`
+  prose: unchecked: the rules the Tailscale monitor keeps
+## 4. Installers and units: rollback and privilege
+  prose: unchecked: the installer's check and restore steps
+## 5. Secrets and site-specific values
+  prose: narrative: review questions
+## 6. Tests
+  prose: narrative: review questions
+## 7. Housekeeping
+  prose: narrative: review questions
+## Reviewing agent PRs (Hive and others)
+  prose: narrative: review questions
+
+[docs/risk-tiers.md]
+## Tier table
+  joined: scripts/tests/check-policies.test.mjs
+## Raise the tier
+  prose: narrative: reviewer judgment above the path match
+## What the code guards
+  prose: unchecked: the guards in the installer and the monitors
+## How to apply it
+  prose: unchecked: the --classify command and the CODEOWNERS check
+## Why these paths
+  prose: unchecked: why each path is in its tier
+## Pull request notes by tier
+  prose: narrative: what to write in a pull request
+
+[docs/security/SECURITY-AI.md]
+## 1. Threat model
+  prose: narrative: assets, trust boundaries and attackers
+## 2. The host rule
+  prose: unchecked: the commands the host rule forbids and where the Bash guard covers it
+## 3. The installer
+  prose: unchecked: the installer's check and restore steps; policies/installer-safety.json checks their order, not this text
+## 4. Credentials, the tailnet and site-specific data
+  prose: narrative: introduces the three subsections
+### Credentials
+  prose: unchecked: credential file modes and the auto_restore default
+### Tailscale writes are tailnet-wide
+  prose: unchecked: the checks the monitor makes before an update
+### Site-specific data
+  prose: unchecked: what policies/credential-safety.json fails on
+## 5. Untrusted text is data, not instructions
+  prose: narrative: how to treat untrusted text
+## 6. Repository target
+  prose: unchecked: what policies/repo-target.json enforces
+## 7. Workflow tokens and CI
+  prose: unchecked: what policies/workflow-permissions.json enforces
+## 8. What agents must never do
+  joined: scripts/tests/agent-boundary-lists.test.mjs
+## 9. When unsure
+  prose: narrative: stop and ask
+
+[docs/strategy.md]
+## Why this repository exists
+  prose: narrative: purpose
+## What ACMM level means here
+  prose: narrative: maturity level
+## What it will not do
+  prose: narrative: scope
+## The real product risks
+  prose: narrative: risks
+## Measurable goals
+  prose: narrative: goals
+## Status on 2026-10-11
+  prose: narrative: dated status
+## Keeping this page honest
+  prose: narrative: review cadence

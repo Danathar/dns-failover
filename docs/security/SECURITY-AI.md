@@ -201,8 +201,9 @@ Without the owner's explicit, in-conversation instruction, an agent never:
 - breaks the host rule (section 2);
 - changes anything in Tier 1 of [docs/risk-tiers.md](../risk-tiers.md) while
   acting autonomously, or relaxes any file that bounds agents (`AGENTS.md`,
-  `policies/`, `risk-config.json`, `.github/CODEOWNERS`,
-  `.claude/settings.json`, `.claude/hooks/`); see
+  `policies/`, `scripts/check-policies.mjs`, `risk-config.json`,
+  `renovate.json`, `.github/CODEOWNERS`, `.github/rulesets/`,
+  `.github/workflows/`, `.claude/settings.json`, `.claude/hooks/`); see
   [agent boundaries](../agent-boundaries.md);
 - weakens the installer's check and restore steps, changes the `auto_restore`
   default, or loosens credential file modes (sections 3 and 4);
