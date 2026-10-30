@@ -170,7 +170,7 @@
 
 [docs/quality.md]
 ## Signals
-  prose: unchecked: table of checks, their workflows and whether each is required
+  joined: scripts/tests/quality-signals.test.mjs
 ## Mutation check on changed lines
   prose: unchecked: what scripts/mutation-check.mjs mutates, its budget and its timeout
 ## How to read a red signal

@@ -17,10 +17,10 @@ commands under "Where to look".
 
 | signal | where it lives | what it tells you | blocks merge |
 |---|---|---|---|
-| CI jobs | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (workflow `CI`): jobs `Lint`, `Unit tests (debian 12)`, `Unit tests (debian 13)`, `E2E (debian container)` | `ruff check .`, the Python unit tests (`python3 -m pytest`, which includes the offline `tailscale-dns-failover/test_monitor.py`) on Debian 12 (Python 3.11) and Debian 13, and the end-to-end test in a throwaway container (`tests/e2e/run.sh`) | yes, all four |
+| CI jobs | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (workflow `CI`): jobs `Lint`, `Unit tests (debian 12)`, `Unit tests (debian 13)`, `E2E (debian container)` | `ruff check .` and shellcheck on every tracked shell script (`git ls-files -z '*.sh' \| xargs -0 shellcheck`), the Python unit tests (`python3 -m pytest`, which includes the offline `tailscale-dns-failover/test_monitor.py`) on Debian 12 (Python 3.11) and Debian 13, and the end-to-end test in a throwaway container (`tests/e2e/run.sh`) | yes, all four |
 | coverage gate | [`.github/workflows/coverage-gate.yml`](../.github/workflows/coverage-gate.yml) (job `Coverage gate`), floor in `[tool.coverage.report] fail_under` of [`pyproject.toml`](../pyproject.toml) | line coverage of the product code under the unit tests has not dropped below the floor (`python3 -m coverage run -m pytest && python3 -m coverage report`) | yes |
-| policy check | [`.github/workflows/policy-check.yml`](../.github/workflows/policy-check.yml) (job `policy-check`), `scripts/check-policies.mjs`, [`policies/`](../policies) | the repository still satisfies its machine-checkable policies: workflow permissions, `--repo` on every documented `gh` write, and the other rules in `policies/`; `node scripts/check-policies.mjs` runs it locally | yes |
-| agent tooling | [`.github/workflows/agent-tooling.yml`](../.github/workflows/agent-tooling.yml) (job `agent-tooling`) | `node --test '.claude/hooks/tests/*.test.mjs'` and `node --test 'scripts/tests/*.test.mjs'`: the command-gate hook (including the host rule) still refuses what it must, and the repo-meta scripts still behave | yes |
+| policy check | [`.github/workflows/policy-check.yml`](../.github/workflows/policy-check.yml) (job `policy-check`), `scripts/check-policies.mjs`, [`policies/`](../policies) | the repository still satisfies its machine-checkable policies: workflow permissions, `--repo` on every documented `gh` write, and the other rules in `policies/`; `node scripts/check-policies.mjs` runs it locally, and `node --test scripts/tests/check-policies.test.mjs` tests the checker itself | yes |
+| agent tooling | [`.github/workflows/agent-tooling.yml`](../.github/workflows/agent-tooling.yml) (job `agent-tooling`) | `.claude/settings.json` still parses and has its `allow`/`ask`/`deny` lists and a `PreToolUse` hook for Bash, then `node --test '.claude/hooks/tests/*.test.mjs'` and `node --test 'scripts/tests/*.test.mjs'`: the command-gate hook (including the host rule) still refuses what it must, and the repo-meta scripts still behave | yes |
 | PR metrics | [`.github/workflows/pr-metrics.yml`](../.github/workflows/pr-metrics.yml), definitions in [metrics.md](metrics.md), readings in [metrics/](metrics/README.md) | acceptance rate and time to merge, by author class | no, report only |
 | auto-QA | `.github/workflows/auto-qa.yml`, rules in `.github/auto-qa-tuning.json` | weekly: when the coverage floor can be raised, one issue with the proposed diff; it never pushes and never lowers the floor | no, report only |
 | agent audit | `.github/workflows/agent-audit.yml`, `scripts/ai-audit-report.mjs` | weekly: each merged agent PR has a linked issue, the signature line and an acceptable merger | no, scheduled |
@@ -85,8 +85,9 @@ changes (#134).
 
 ## How to read a red signal
 
-- **`Lint`**: a `ruff check .` finding; fix the code, do not widen the ignore
-  list in `pyproject.toml` (a Tier 2 path in [risk-tiers.md](risk-tiers.md)).
+- **`Lint`**: a `ruff check .` or shellcheck finding; fix the code, do not
+  widen the ignore list in `pyproject.toml` (a Tier 2 path in
+  [risk-tiers.md](risk-tiers.md)) or `.shellcheckrc`.
 - **`Unit tests (debian 12)` red, `(debian 13)` green** (or the reverse): a
   Python-version or package-version difference. Product code must run on
   Python 3.11, which is what Debian 12 ships.
@@ -98,9 +99,11 @@ changes (#134).
   test; lowering the floor is a Tier 2 change that needs the owner.
 - **`policy-check`**: a rule in `policies/` failed; the output names the rule
   and the offending file.
-- **`agent-tooling`**: a hook test or a gate-refusal corpus entry
-  (`tests/fixtures/gate-refusal-corpus.json`) failed. Treat it as a security
-  regression until proven otherwise: the hook is what keeps agents off the
+- **`agent-tooling`**: `.claude/settings.json` lost a permission list or its
+  Bash hook, a hook test or a gate-refusal corpus entry
+  (`tests/fixtures/gate-refusal-corpus.json`) failed, or a script test in
+  `scripts/tests/` failed. Treat the first two as a security regression until
+  proven otherwise: the hook and its settings are what keep agents off the
   host (see [agent-boundaries.md](agent-boundaries.md)).
 - **Green on a stale branch**: required checks run on the PR branch. Check the
   branch is current with `main` before trusting a green run.
