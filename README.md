@@ -72,7 +72,7 @@ time. Tailscale setting changes also take time to reach devices.
 | `tailscale-dns-failover/monitor.py` | Checks the Tailscale ControlD profile over HTTPS. Uses the Tailscale API to disable override after repeated failure and optionally restore it after recovery. | Automatically through `tailscale-dns-failover.timer`, 20 seconds after each run finishes. |
 | `tailscale-dns-failover/configure.py` | Prompts for an OAuth client ID and secret, reads Tailscale DNS settings, discovers the ControlD profile, and saves root-only configuration. Refuses to overwrite an existing file. | Manually during credential setup. |
 | `tailscale-dns-failover/install.sh` | Installs the Tailscale monitor and its systemd units. Does not enable its timer. | Manually during installation or an update. |
-| `tailscale-dns-failover/test_monitor.py` | Runs 18 offline regression tests for outage thresholds, recovery timing, API response handling, profile matching, and preservation of other DNS settings. Makes no real API changes. | Collected by `python3 -m pytest` (still runs with `python3 -m unittest -v` inside `tailscale-dns-failover`). Manually during development or before installation. |
+| `tailscale-dns-failover/test_monitor.py` | Runs 19 offline regression tests for outage thresholds, recovery timing, API response handling, profile matching, and preservation of other DNS settings. Makes no real API changes. | Collected by `python3 -m pytest` (still runs with `python3 -m unittest -v` inside `tailscale-dns-failover`). Manually during development or before installation. |
 
 Installed program names are `/usr/local/sbin/dns-upstream-check` and
 `/usr/local/sbin/tailscale-dns-failover`. These are copies of the two monitors,
