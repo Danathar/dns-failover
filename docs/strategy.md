@@ -74,7 +74,7 @@ Priorities follow from these, in this order:
 2. **Tailnet-wide override writes.** `monitor.py` changes a setting that affects
    every device on the tailnet, using OAuth credentials. A false positive
    disables DNS filtering for everyone; a failed restore leaves it off. Covered
-   by the 18 offline tests in `tailscale-dns-failover/test_monitor.py` with fake
+   by the 19 offline tests in `tailscale-dns-failover/test_monitor.py` with fake
    API responses. `--dry-run` is not a safe preview: it uses real credentials
    against the live API.
 3. **Installer rollback.** Both installers run as root on a live server. The

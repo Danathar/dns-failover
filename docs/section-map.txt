@@ -64,9 +64,9 @@
 
 [README.md]
 ## What it does
-  prose: unchecked: the failover behaviour of the scripts
+  joined: tests/unit/test_readme_scripts.py
 ## The seven scripts
-  prose: unchecked: table of the scripts
+  joined: tests/unit/test_readme_scripts.py
 ## Supporting files
   prose: unchecked: table of the unit and config files
 ## Requirements and installation
