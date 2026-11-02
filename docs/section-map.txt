@@ -224,7 +224,7 @@
 ## 4. Credentials, the tailnet and site-specific data
   prose: narrative: introduces the three subsections
 ### Credentials
-  prose: unchecked: credential file modes and the auto_restore default
+  joined: tests/unit/test_security_credentials.py
 ### Tailscale writes are tailnet-wide
   prose: unchecked: the checks the monitor makes before an update
 ### Site-specific data
