@@ -134,12 +134,15 @@ run as root against a live server. Nobody but the owner runs them.
 
 - [ ] **`set -eu` stays**, and expansions are quoted.
 - [ ] **A backup exists before the first overwrite**, outside `/etc`, owned by
-      root with mode `0700`, and it is created once (an existing backup is not
-      replaced by an already-modified file).
+      root with mode `0700`. There are two files:
+      `dnsmasq.conf.before-failover` is created once (an existing backup is not
+      replaced by an already-modified file), and `dnsmasq.conf.last-good` is
+      saved on every run, outside any `if`, and is the rollback target.
 - [ ] **The new `dnsmasq.conf` is validated before it is installed**
       (`dnsmasq --test`) **and after** (`systemd-helper checkconfig`); if the
-      post-install check or the restart fails, the backup is restored and the
-      installer exits non-zero. A new step that can fail after the config is
+      post-install check or the restart fails, `dnsmasq.conf.last-good` is
+      restored, the installer prints which config it restored, and it exits
+      non-zero. A new step that can fail after the config is
       installed must be inside that rollback, or itself restore the backup.
 - [ ] **Units are verified** with `systemd-analyze verify` before they are
       enabled, and the installer finishes by confirming the services are

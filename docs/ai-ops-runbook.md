@@ -195,9 +195,12 @@ sudo systemctl stop dns-upstream-check.service
 ```
 
 Both timers are this project's own; disabling them leaves the last
-`servers.conf` in place. If DNS is down, the installer's backup of
-`/etc/dnsmasq.conf` is the way back; read what the installer printed when it
-ran, and `dnsmasq --test` before restarting dnsmasq.
+`servers.conf` in place. If DNS is down, the installer's backups of
+`/etc/dnsmasq.conf` in `/var/lib/dns-failover-backups/` are the way back:
+`dnsmasq.conf.last-good` is the config from the start of the latest run, and
+`dnsmasq.conf.before-failover` is the one from before the first install. Read
+what the installer printed when it ran, and `dnsmasq --test` before restarting
+dnsmasq.
 
 **If the tailnet override was turned off**, it stays off unless `auto_restore`
 is enabled. Turn it back on in the Tailscale admin console DNS page (a manual

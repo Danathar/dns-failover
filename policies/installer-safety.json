@@ -17,8 +17,8 @@
                     "why": "the installed config must be validated with systemd-helper checkconfig and a dnsmasq restart, with a failure branch"
                 },
                 {
-                    "pattern": "^\\s*cp -a /etc/dnsmasq\\.conf \"\\$backup\"",
-                    "why": "the original /etc/dnsmasq.conf must be backed up"
+                    "pattern": "^cp -a /etc/dnsmasq\\.conf \"\\$backup\"\\s*$",
+                    "why": "the running /etc/dnsmasq.conf must be backed up on every run: the copy to \"$backup\" is the rollback target, so it must be an unindented command of its own, not inside an `if` or a list"
                 }
             ],
             "forbidden": [
@@ -77,6 +77,24 @@
                     "expect": "systemctl restart dnsmasq\\.service",
                     "within": 2,
                     "why": "a restore of the backup must restart dnsmasq so the old config is live again"
+                },
+                {
+                    "pattern": "^if \\[ ! -e \"\\$original\" \\]; then\\s*$",
+                    "expect": "^\\s+cp -a /etc/dnsmasq\\.conf \"\\$original\"\\s*$",
+                    "within": 1,
+                    "why": "the first-install original must be written only when it does not exist yet, so an already-modified file never replaces it"
+                },
+                {
+                    "pattern": "^\\s+cp -a /etc/dnsmasq\\.conf \"\\$original\"\\s*$",
+                    "expect": "^fi\\s*$",
+                    "within": 1,
+                    "why": "the once-only `if` must hold nothing but the copy of the original, so the per-run copy after its `fi` happens on every run"
+                },
+                {
+                    "pattern": "^if ! /usr/share/dnsmasq/systemd-helper checkconfig",
+                    "expect": "^\\s*echo \"[^\"]*\\$backup[^\"]*\" >&2\\s*$",
+                    "within": 1,
+                    "why": "the failure branch must first print which config it restores, so the message survives a failed restart"
                 }
             ]
         }

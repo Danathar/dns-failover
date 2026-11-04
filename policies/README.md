@@ -72,11 +72,16 @@ vacuously. The rules are `required` (a line must match), `forbidden` (none may),
 - `set -eu` is present and `set +e` is not, so a failing command aborts.
 - `dnsmasq --test --conf-file="$config"` exists, is not followed by `|| true`,
   and every install of `"$config"` to `/etc/dnsmasq.conf` comes after it.
-- The original `/etc/dnsmasq.conf` is copied to `"$backup"` before the new
-  config is installed.
+- The running `/etc/dnsmasq.conf` is copied to `"$backup"`
+  (`dnsmasq.conf.last-good`) before the new config is installed, by an
+  unindented command of its own, so the copy happens on every run.
+- The copy to `"$original"` (`dnsmasq.conf.before-failover`) is the only line
+  inside `if [ ! -e "$original" ]; then`, so the first-install original is
+  never replaced.
 - `systemd-helper checkconfig` runs after the install, inside the
   `if ! ... || ! systemctl restart dnsmasq.service; then` failure branch; the
-  branch installs the backup, restarts dnsmasq and exits non-zero.
+  branch prints which config it restores, installs the backup, restarts dnsmasq
+  and exits non-zero.
 - The installer uses no `curl`, `wget` or `sudo`.
 
 ## credential-safety.json

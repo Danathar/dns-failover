@@ -64,9 +64,11 @@ else is the reviewer's judgment, so a Tier 1 change states in the PR what was
 checked.
 
 - **Installer.** `install-dns-failover.sh` checks the reviewed config with
-  `dnsmasq --test` before installing it, backs up the original
-  `/etc/dnsmasq.conf` first, and restores the backup and exits non-zero when
-  `checkconfig` or the restart fails ([`policies/installer-safety.json`](../policies/installer-safety.json)).
+  `dnsmasq --test` before installing it, first keeps the original
+  `/etc/dnsmasq.conf` once as `dnsmasq.conf.before-failover` and saves the
+  running config on every run as `dnsmasq.conf.last-good`, and restores
+  `dnsmasq.conf.last-good` and exits non-zero when `checkconfig` or the restart
+  fails ([`policies/installer-safety.json`](../policies/installer-safety.json)).
 - **Credentials.** `configure.py` creates the config exclusively with mode
   0600 in a 0700 directory, never prints the secret, and writes `auto_restore`
   false; `monitor.py` treats a missing `auto_restore` as false

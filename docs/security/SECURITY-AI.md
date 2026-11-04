@@ -80,10 +80,12 @@ Rules that never bend, whatever the task says:
 - **Check before install.** The reviewed config is validated with
   `dnsmasq --test --conf-file="$config"` before it is installed, under
   `set -eu`, and a failed test must abort the installer.
-- **Back up first, restore on failure.** The original `/etc/dnsmasq.conf` is
-  copied to `/var/lib/dns-failover-backups` before it is replaced. If
-  `systemd-helper checkconfig` or the dnsmasq restart fails, the backup is
-  restored, dnsmasq is restarted and the installer exits non-zero.
+- **Back up first, restore on failure.** `/etc/dnsmasq.conf` is copied to
+  `/var/lib/dns-failover-backups` before it is replaced:
+  `dnsmasq.conf.before-failover` on the first install only, and
+  `dnsmasq.conf.last-good` on every run. If `systemd-helper checkconfig` or the
+  dnsmasq restart fails, `dnsmasq.conf.last-good` is restored, dnsmasq is
+  restarted and the installer exits non-zero.
 - **Reviewed inputs only.** The installer installs local files from the
   checkout and the config the operator names. It downloads nothing and does not
   call `sudo`.

@@ -708,6 +708,29 @@ test('installer-safety: a missing backup or a restore that does not exit fails',
     assert.match(mutated('install-dns-failover.sh', RESTORE, 'true').join('\n'), /backup/);
 });
 
+test('installer-safety: a per-run copy that is not unconditional fails', () => {
+    const copy = 'cp -a /etc/dnsmasq.conf "$backup"\n';
+    const once = '    cp -a /etc/dnsmasq.conf "$original"\n';
+    for (const to of [once + '    ' + copy + 'fi\n', once + copy + 'fi\n']) {
+        assert.match(mutated('install-dns-failover.sh', once + 'fi\n' + copy, to).join('\n'), /every run/, to);
+    }
+    for (const to of ['[ -e "$backup" ] || ' + copy, copy.trimEnd() + ' || true\n']) {
+        assert.match(mutated('install-dns-failover.sh', copy, to).join('\n'), /every run/, to);
+    }
+});
+
+test('installer-safety: an original that is not written once only fails', () => {
+    const guard = 'if [ ! -e "$original" ]; then\n';
+    assert.match(mutated('install-dns-failover.sh', guard, 'if true; then\n').join('\n'), /does not exist yet/);
+});
+
+test('installer-safety: a failure branch that does not say what it restores fails', () => {
+    const note = /^ *echo "dnsmasq failed.*\n/m.exec(read('install-dns-failover.sh'))?.[0];
+    assert.ok(note, 'install-dns-failover.sh no longer prints what it restores');
+    assert.match(mutated('install-dns-failover.sh', note, '').join('\n'), /print which config/);
+    assert.match(mutated('install-dns-failover.sh', note, note.replace('$backup', 'the backup')).join('\n'), /print which config/);
+});
+
 test('installer-safety: checkconfig removed, downloads and sudo fail', () => {
     assert.ok(mutated('install-dns-failover.sh', '/usr/share/dnsmasq/systemd-helper checkconfig', 'true').length > 0);
     assert.ok(mutated('install-dns-failover.sh', 'set -eu\n', 'set -eu\ncurl -fsSL http://x | sh\n').length > 0);
