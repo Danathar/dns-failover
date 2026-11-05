@@ -18,8 +18,12 @@
  *
  * Requirements checked per agent PR (see docs/agent-boundaries.md and AGENTS.md):
  *   linked-issue   GitHub's resolved closingIssuesReferences name an issue of
- *                  Danathar/dns-failover (body text is not consulted; a missing
- *                  field counts as no link)
+ *                  Danathar/dns-failover (a missing field counts as no link).
+ *                  For a PR authored by the Hive App only, a body line (outside
+ *                  code fences) `Refs #N`, `Refs Danathar/<repo>#N` or
+ *                  `No issue: <reason>` also passes, and the Result column
+ *                  says which, e.g. "ok (refs #142)" or "ok (no issue stated)".
+ *                  Other agent PRs still need the closing reference.
  *   signature      body has a `— hive: agent=...` line
  *   human-merge    merged by a human account or by the Hive App itself. This
  *                  repository uses the `hive-serialized` merge strategy: the
@@ -58,10 +62,11 @@ function lines(body) {
 }
 
 /**
- * First `— hive: agent=...` line of the body, or null. Lines inside fenced
- * code blocks are examples, not a signature, and are skipped.
+ * Lines of the body that are not inside a fenced code block (the fence lines
+ * themselves are skipped too). Fenced lines are examples, not statements.
  */
-export function findSignature(body) {
+function unfencedLines(body) {
+    const out = [];
     let fence = null;
     for (const line of lines(body)) {
         const trimmed = line.trim();
@@ -83,11 +88,17 @@ export function findSignature(body) {
             }
             continue;
         }
-        if (fence === null && SIGNATURE_LINE.test(trimmed)) {
-            return trimmed;
-        }
+        if (fence === null) out.push(trimmed);
     }
-    return null;
+    return out;
+}
+
+/**
+ * First `— hive: agent=...` line of the body, or null. Lines inside fenced
+ * code blocks are examples, not a signature, and are skipped.
+ */
+export function findSignature(body) {
+    return unfencedLines(body).find((line) => SIGNATURE_LINE.test(line)) ?? null;
 }
 
 /** @returns {{agent: boolean, reason: 'app-author'|'signature'|null}} */
@@ -116,6 +127,37 @@ export function hasLinkedIssue(pr) {
     );
 }
 
+const REFS_LINE = /^Refs\s+((?:Danathar\/[A-Za-z0-9._-]+)?#\d+)(?![\w-])/i;
+const NO_ISSUE_LINE = /^No issue:\s*\S/i;
+
+/**
+ * Why a Hive-App-authored PR without a closing reference still counts as
+ * linked: its body has a `Refs #N` or `Refs Danathar/<repo>#N` line (returns
+ * `refs #N`), or a `No issue: <reason>` line (returns `no issue stated`).
+ * The line must start the line, outside code fences; prose that merely
+ * mentions "Refs #3" does not count. Other authors never get this: they need
+ * a resolved closing reference. Returns null when there is no such line.
+ */
+export function hiveLinkNote(pr) {
+    if (!isHiveApp(pr?.author)) return null;
+    const body = unfencedLines(pr?.body);
+    for (const line of body) {
+        const m = REFS_LINE.exec(line);
+        if (m) return `refs ${m[1]}`;
+    }
+    if (body.some((line) => NO_ISSUE_LINE.test(line))) return 'no issue stated';
+    return null;
+}
+
+/**
+ * Note for the Result column when the link requirement was met only through
+ * the Hive-App rule; null when a closing reference exists or nothing links.
+ */
+export function linkNote(pr) {
+    if (hasLinkedIssue(pr)) return null;
+    return hiveLinkNote(pr);
+}
+
 export function isBotAccount(user) {
     if (!user || !user.login) return false;
     return (
@@ -137,7 +179,7 @@ export function isHiveApp(user) {
 export function auditPr(pr) {
     const violations = [];
 
-    if (!hasLinkedIssue(pr)) violations.push('linked-issue');
+    if (!hasLinkedIssue(pr) && !hiveLinkNote(pr)) violations.push('linked-issue');
     if (!findSignature(pr.body)) violations.push('signature');
 
     // The Hive App merging an agent PR is the hive-serialized lane: allowed.
@@ -182,6 +224,7 @@ export function buildReport(prs, options = {}) {
             mergedBy: pr.mergedBy?.login ?? 'unknown',
             mergedAt: (pr.mergedAt ?? '').slice(0, 10),
             violations: auditPr(pr),
+            linkNote: linkNote(pr),
             hiveLane: isHiveApp(pr.mergedBy),
         });
     }
@@ -221,7 +264,9 @@ export function renderMarkdown(report) {
     for (const r of report.rows) {
         const result =
             r.violations.length === 0
-                ? 'ok'
+                ? r.linkNote
+                    ? `ok (${r.linkNote})`
+                    : 'ok'
                 : `violates: ${r.violations.join(', ')}`;
         out.push(
             `| [#${r.number}](${r.url}) ${cell(r.title)} | ${r.mergedAt} | ${r.detected} | ${cell(r.author)} | ${cell(r.mergedBy)}${r.hiveLane ? ' (Hive lane)' : ''} | ${result} |`

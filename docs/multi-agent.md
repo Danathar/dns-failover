@@ -95,7 +95,11 @@ reading and settled by the owner.
    your pull request body which files you touch and which open pull requests you
    checked them against.
 2. **One pull request per concern.** A pull request answers one issue (or one
-   named group of issues) and says so with `Closes #N`. Do not mix a behaviour
+   named group of issues) and says so with `Closes #N`. A Hive App PR may
+   instead give a line `Refs #N` (or `Refs Danathar/<repo>#N`) when the issue
+   stays open, or a line `No issue: <reason>` when there is none; the weekly
+   audit accepts these for the Hive App only and shows which in its Result
+   column. Any other agent PR still needs `Closes #N`. Do not mix a behaviour
    change to the failover logic with a docs or CI change. Branch from current
    `origin/main`; do not stack one branch on another. Parallel local sessions
    use one `git worktree` each, so two branches are never checked out in the
