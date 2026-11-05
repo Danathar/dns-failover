@@ -188,7 +188,7 @@
 ## 2. Failover correctness: `dns-upstream-check.py`
   joined: tests/unit/test_review_rubric_failover.py
 ## 3. Tailscale override ownership: `monitor.py` and `configure.py`
-  prose: unchecked: the rules the Tailscale monitor keeps
+  joined: tests/unit/test_review_rubric_tailscale.py
 ## 4. Installers and units: rollback and privilege
   prose: unchecked: the installer's check and restore steps
 ## 5. Secrets and site-specific values
