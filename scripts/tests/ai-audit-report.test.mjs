@@ -12,6 +12,7 @@ import {
     classify,
     findSignature,
     hasLinkedIssue,
+    linkNote,
     main,
     parseArgs,
     renderMarkdown,
@@ -370,4 +371,75 @@ test('run as a script, the exit code reaches the shell the way agent-audit.yml c
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
+});
+
+const noClosing = (body, overrides = {}) =>
+    pr({ body: `${body}\n\n${SIG}`, closingIssuesReferences: [], ...overrides });
+
+test('a Hive App PR with a Refs #N line passes and the Result column says so', () => {
+    const p = noClosing('Summary.\n\nRefs #142 (left open until green)');
+    assert.deepEqual(auditPr(p), []);
+    assert.equal(linkNote(p), 'refs #142');
+    assert.match(renderMarkdown(buildReport([p])), /\| ok \(refs #142\) \|/);
+});
+
+test('a Hive App PR with a Refs Danathar/<repo>#N line passes', () => {
+    const p = noClosing('Refs Danathar/aib#7');
+    assert.deepEqual(auditPr(p), []);
+    assert.match(renderMarkdown(buildReport([p])), /ok \(refs Danathar\/aib#7\)/);
+});
+
+test('a Hive App PR with a No issue: reason line passes', () => {
+    const p = noClosing('No issue: typo in a comment');
+    assert.deepEqual(auditPr(p), []);
+    assert.match(renderMarkdown(buildReport([p])), /\| ok \(no issue stated\) \|/);
+    // a bare "No issue:" with no reason is not a statement
+    assert.deepEqual(auditPr(noClosing('No issue:')), ['linked-issue']);
+});
+
+test('a closing reference still passes and shows plain ok, even beside a Refs line', () => {
+    const p = pr({ body: `Refs #9\n${SIG}` });
+    assert.deepEqual(auditPr(p), []);
+    assert.equal(linkNote(p), null);
+    assert.match(renderMarkdown(buildReport([p])), /\| ok \|/);
+});
+
+test('a Hive App PR with no closing, Refs or No issue line is still flagged', () => {
+    for (const body of ['Just prose.', 'Fixes nothing', '']) {
+        assert.deepEqual(auditPr(noClosing(body)), ['linked-issue']);
+    }
+});
+
+test('Refs and No issue: count only as a line of the body, outside code fences', () => {
+    for (const body of [
+        'This work refs #5 in prose',
+        'See Refs #5 for background',
+        '- Refs #5',
+        'Refs 5',
+        'Refs #5x',
+        'Refs other/repo#5',
+        'It says No issue: none',
+        '```\nRefs #5\n```',
+        '```\nNo issue: example\n```',
+    ]) {
+        assert.deepEqual(auditPr(noClosing(body)), ['linked-issue'], body);
+    }
+});
+
+test('a non-Hive agent PR with only a Refs or No issue line is still flagged', () => {
+    for (const author of [
+        { login: 'Danathar', is_bot: false },
+        { login: 'app/dependabot', is_bot: true },
+    ]) {
+        for (const body of ['Refs #142', 'Refs Danathar/aib#7', 'No issue: tiny']) {
+            const p = noClosing(body, { author });
+            assert.deepEqual(auditPr(p), ['linked-issue'], `${author.login} ${body}`);
+            assert.equal(linkNote(p), null);
+        }
+    }
+});
+
+test('the REST spelling of the Hive App gets the Refs rule too', () => {
+    const p = noClosing('Refs #3', { author: { login: 'danathar-atomic-hive[bot]' } });
+    assert.deepEqual(auditPr(p), []);
 });
