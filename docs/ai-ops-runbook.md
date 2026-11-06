@@ -131,7 +131,8 @@ gh run view "$RUN" --repo Danathar/dns-failover --log-failed
    that pinned the behaviour (the two Debian jobs run different Python versions,
    so a failure in one only is usually a version issue); `E2E (debian container)`
    runs `dns-upstream-check.py` against real dnsmasq instances inside the job
-   container (it does not run the installers).
+   container, then `install-dns-failover.sh` with stand-ins for systemd to check
+   its rollback (it does not run the Tailscale installer).
 2. **Was it the last commit or the environment.** Re-run once
    (`gh run rerun "$RUN" --repo Danathar/dns-failover --failed`). A pass on
    re-run is a flake; note it in the tracking issue. A new package version in a
@@ -195,9 +196,12 @@ sudo systemctl stop dns-upstream-check.service
 ```
 
 Both timers are this project's own; disabling them leaves the last
-`servers.conf` in place. If DNS is down, the installer's backup of
-`/etc/dnsmasq.conf` is the way back; read what the installer printed when it
-ran, and `dnsmasq --test` before restarting dnsmasq.
+`servers.conf` in place. If DNS is down, the installer's backups of
+`/etc/dnsmasq.conf` in `/var/lib/dns-failover-backups/` are the way back:
+`dnsmasq.conf.last-good` is the config from the start of the latest run, and
+`dnsmasq.conf.before-failover` is the one from before the first install. Read
+what the installer printed when it ran, and `dnsmasq --test` before restarting
+dnsmasq.
 
 **If the tailnet override was turned off**, it stays off unless `auto_restore`
 is enabled. Turn it back on in the Tailscale admin console DNS page (a manual

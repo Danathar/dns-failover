@@ -17,8 +17,16 @@
                     "why": "the installed config must be validated with systemd-helper checkconfig and a dnsmasq restart, with a failure branch"
                 },
                 {
-                    "pattern": "^\\s*cp -a /etc/dnsmasq\\.conf \"\\$backup\"",
-                    "why": "the original /etc/dnsmasq.conf must be backed up"
+                    "pattern": "^cp -a --remove-destination /etc/dnsmasq\\.conf \"\\$backup\"\\s*$",
+                    "why": "the running /etc/dnsmasq.conf must be backed up on every run: the copy to \"$backup\" is the rollback target, so it must be an unindented command of its own, not inside an `if` or a list, and --remove-destination keeps it from writing through a symlink saved by an earlier run"
+                },
+                {
+                    "pattern": "^original=/var/lib/dns-failover-backups/dnsmasq\\.conf\\.before-failover\\s*$",
+                    "why": "the first-install original keeps its own path, so the per-run copy can never replace it"
+                },
+                {
+                    "pattern": "^backup=/var/lib/dns-failover-backups/dnsmasq\\.conf\\.last-good\\s*$",
+                    "why": "the per-run rollback copy keeps its own path in the root-only directory, apart from the first-install original"
                 }
             ],
             "forbidden": [
@@ -51,7 +59,7 @@
                 },
                 {
                     "pattern": "^\\s*install -m 0644 \"\\$config\" /etc/dnsmasq\\.conf",
-                    "after": "^\\s*cp -a /etc/dnsmasq\\.conf \"\\$backup\"",
+                    "after": "^cp -a --remove-destination /etc/dnsmasq\\.conf \"\\$backup\"\\s*$",
                     "why": "the backup must exist before the config is replaced"
                 },
                 {
@@ -60,23 +68,41 @@
                     "why": "checkconfig must run on the installed config"
                 },
                 {
-                    "pattern": "^\\s*install -m 0644 \"\\$backup\" /etc/dnsmasq\\.conf",
+                    "pattern": "^\\s*cp -a --remove-destination \"\\$backup\" /etc/dnsmasq\\.conf\\s*$",
                     "after": "^\\s*install -m 0644 \"\\$config\" /etc/dnsmasq\\.conf",
                     "why": "the backup is restored only after the new config was installed"
                 }
             ],
             "followedWithin": [
                 {
-                    "pattern": "^\\s*install -m 0644 \"\\$backup\" /etc/dnsmasq\\.conf",
+                    "pattern": "^\\s*cp -a --remove-destination \"\\$backup\" /etc/dnsmasq\\.conf\\s*$",
                     "expect": "^\\s*exit\\s+[1-9]",
                     "within": 3,
                     "why": "a restore of the backup must restart dnsmasq and then exit non-zero"
                 },
                 {
-                    "pattern": "^\\s*install -m 0644 \"\\$backup\" /etc/dnsmasq\\.conf",
+                    "pattern": "^\\s*cp -a --remove-destination \"\\$backup\" /etc/dnsmasq\\.conf\\s*$",
                     "expect": "systemctl restart dnsmasq\\.service",
                     "within": 2,
                     "why": "a restore of the backup must restart dnsmasq so the old config is live again"
+                },
+                {
+                    "pattern": "^if \\[ ! -e \"\\$original\" \\] && \\[ ! -L \"\\$original\" \\]; then\\s*$",
+                    "expect": "^\\s+cp -a /etc/dnsmasq\\.conf \"\\$original\"\\s*$",
+                    "within": 1,
+                    "why": "the first-install original must be written only when it does not exist yet, as a file or as a symlink that dangles from the backup directory, so an already-modified file never replaces it"
+                },
+                {
+                    "pattern": "^\\s+cp -a /etc/dnsmasq\\.conf \"\\$original\"\\s*$",
+                    "expect": "^fi\\s*$",
+                    "within": 1,
+                    "why": "the once-only `if` must hold nothing but the copy of the original, so the per-run copy after its `fi` happens on every run"
+                },
+                {
+                    "pattern": "^if ! /usr/share/dnsmasq/systemd-helper checkconfig",
+                    "expect": "^\\s*echo \"[^\"]*\\$backup[^\"]*\" >&2\\s*$",
+                    "within": 1,
+                    "why": "the failure branch must first print which config it restores, so the message survives a failed restart"
                 }
             ]
         }

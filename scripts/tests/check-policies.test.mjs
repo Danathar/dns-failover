@@ -661,7 +661,7 @@ function mutated(file, from, to) {
     return run({ [file]: real.replace(from, to) });
 }
 const INSTALL_CONFIG = 'install -m 0644 "$config" /etc/dnsmasq.conf';
-const RESTORE = 'install -m 0644 "$backup" /etc/dnsmasq.conf';
+const RESTORE = 'cp -a --remove-destination "$backup" /etc/dnsmasq.conf';
 
 test('installer-safety: the real installer passes', () => {
     assert.deepEqual(run({}), []);
@@ -702,10 +702,49 @@ test('installer-safety: an ignored dnsmasq --test, set +e and a missing set -eu 
 });
 
 test('installer-safety: a missing backup or a restore that does not exit fails', () => {
-    assert.match(mutated('install-dns-failover.sh', 'cp -a /etc/dnsmasq.conf "$backup"', 'true').join('\n'), /backed up/);
+    assert.match(mutated('install-dns-failover.sh', 'cp -a --remove-destination /etc/dnsmasq.conf "$backup"', 'true').join('\n'), /backed up/);
     const v = mutated('install-dns-failover.sh', RESTORE + '\n    systemctl restart dnsmasq.service\n    exit 1', RESTORE + '\n    systemctl restart dnsmasq.service\n    :');
     assert.match(v.join('\n'), /exit non-zero/);
     assert.match(mutated('install-dns-failover.sh', RESTORE, 'true').join('\n'), /backup/);
+});
+
+test('installer-safety: a per-run copy that is not unconditional fails', () => {
+    const copy = 'cp -a --remove-destination /etc/dnsmasq.conf "$backup"\n';
+    const once = '    cp -a /etc/dnsmasq.conf "$original"\n';
+    for (const to of [once + '    ' + copy + 'fi\n', once + copy + 'fi\n']) {
+        assert.match(mutated('install-dns-failover.sh', once + 'fi\n' + copy, to).join('\n'), /every run/, to);
+    }
+    for (const to of ['[ -e "$backup" ] || ' + copy, copy.trimEnd() + ' || true\n']) {
+        assert.match(mutated('install-dns-failover.sh', copy, to).join('\n'), /every run/, to);
+    }
+});
+
+test('installer-safety: an original that is not written once only fails', () => {
+    const guard = 'if [ ! -e "$original" ] && [ ! -L "$original" ]; then\n';
+    assert.match(mutated('install-dns-failover.sh', guard, 'if true; then\n').join('\n'), /does not exist yet/);
+    assert.match(mutated('install-dns-failover.sh', guard, 'if [ ! -e "$original" ]; then\n').join('\n'), /does not exist yet/);
+});
+
+test('installer-safety: a copy or restore that follows a symlink fails', () => {
+    const copy = 'cp -a --remove-destination /etc/dnsmasq.conf "$backup"';
+    assert.match(mutated('install-dns-failover.sh', copy, 'cp -a /etc/dnsmasq.conf "$backup"').join('\n'), /writing through/);
+    assert.match(mutated('install-dns-failover.sh', copy, 'cp -aL --remove-destination /etc/dnsmasq.conf "$backup"').join('\n'), /every run/);
+    assert.match(mutated('install-dns-failover.sh', RESTORE, 'install -m 0644 "$backup" /etc/dnsmasq.conf').join('\n'), /backup/);
+});
+
+test('installer-safety: backup paths that move or collide fail', () => {
+    const original = 'original=/var/lib/dns-failover-backups/dnsmasq.conf.before-failover';
+    const backup = 'backup=/var/lib/dns-failover-backups/dnsmasq.conf.last-good';
+    assert.match(mutated('install-dns-failover.sh', backup, 'backup=/var/lib/dns-failover-backups/dnsmasq.conf.before-failover').join('\n'), /per-run rollback copy/);
+    assert.match(mutated('install-dns-failover.sh', backup, 'backup=/tmp/dnsmasq.conf.last-good').join('\n'), /per-run rollback copy/);
+    assert.match(mutated('install-dns-failover.sh', original, 'original=/var/lib/dns-failover-backups/dnsmasq.conf.last-good').join('\n'), /first-install original keeps/);
+});
+
+test('installer-safety: a failure branch that does not say what it restores fails', () => {
+    const note = /^ *echo "dnsmasq failed.*\n/m.exec(read('install-dns-failover.sh'))?.[0];
+    assert.ok(note, 'install-dns-failover.sh no longer prints what it restores');
+    assert.match(mutated('install-dns-failover.sh', note, '').join('\n'), /print which config/);
+    assert.match(mutated('install-dns-failover.sh', note, note.replace('$backup', 'the backup')).join('\n'), /print which config/);
 });
 
 test('installer-safety: checkconfig removed, downloads and sudo fail', () => {

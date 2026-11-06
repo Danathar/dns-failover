@@ -125,9 +125,15 @@ Install local failover from this folder:
 sudo sh ./install-dns-failover.sh /absolute/path/to/reviewed-dnsmasq.conf
 ```
 
-This enables the backup Stubby service and local monitoring timer. The initial
-configuration backup is kept in `/var/lib/dns-failover-backups/`, outside the
-repository. If you also need the network startup ordering fix, install
+This enables the backup Stubby service and local monitoring timer. Two
+configuration backups are kept in `/var/lib/dns-failover-backups/`, outside the
+repository: `dnsmasq.conf.before-failover` is the configuration from before the
+first install and is never replaced, and `dnsmasq.conf.last-good` is saved on
+every run and is what the installer restores if the new configuration fails. If
+`/etc/dnsmasq.conf` is a symlink, both keep the link rather than a copy of its
+contents, a failed run puts the link back, and the file it points to is left
+alone. A run that succeeds replaces the link with a regular file. If you also
+need the network startup ordering fix, install
 `dnsmasq-wait-online.conf` as a drop-in under
 `/etc/systemd/system/dnsmasq.service.d/` and reload systemd. That optional file
 is not installed automatically.
