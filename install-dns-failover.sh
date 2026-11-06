@@ -6,13 +6,20 @@ if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
     exit 1
 fi
 config=$1
-backup=/var/lib/dns-failover-backups/dnsmasq.conf.before-failover
+original=/var/lib/dns-failover-backups/dnsmasq.conf.before-failover
+backup=/var/lib/dns-failover-backups/dnsmasq.conf.last-good
 mkdir -p /var/lib/dns-failover-backups
 chmod 0700 /var/lib/dns-failover-backups
 mkdir -p /etc/stubby /etc/systemd/system/dnsmasq.service.d
-if [ ! -e "$backup" ]; then
-    cp -a /etc/dnsmasq.conf "$backup"
+# $original is the config from before the first install and is never replaced.
+# $backup is the config running now, saved on every run: the rollback target.
+# /etc/dnsmasq.conf may be a symlink. cp -a keeps it one, and such a copy can
+# dangle here, so -L is checked too. --remove-destination stops a copy going
+# through a link saved by an earlier run into the file it points to.
+if [ ! -e "$original" ] && [ ! -L "$original" ]; then
+    cp -a /etc/dnsmasq.conf "$original"
 fi
+cp -a --remove-destination /etc/dnsmasq.conf "$backup"
 install -m 0755 "$stage/dns-upstream-check.py" /usr/local/sbin/dns-upstream-check
 install -m 0644 "$stage/stubby-fallback.yml" /etc/stubby/fallback.yml
 install -m 0644 "$stage/stubby-fallback.service" /etc/systemd/system/stubby-fallback.service
@@ -26,7 +33,8 @@ systemctl start dns-upstream-check.service
 dnsmasq --test --conf-file="$config"
 install -m 0644 "$config" /etc/dnsmasq.conf
 if ! /usr/share/dnsmasq/systemd-helper checkconfig || ! systemctl restart dnsmasq.service; then
-    install -m 0644 "$backup" /etc/dnsmasq.conf
+    echo "dnsmasq failed with $config; restoring the config from the start of this run: $backup" >&2
+    cp -a --remove-destination "$backup" /etc/dnsmasq.conf
     systemctl restart dnsmasq.service
     exit 1
 fi

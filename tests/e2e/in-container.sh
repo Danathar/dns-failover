@@ -12,9 +12,10 @@
 #
 # The real dns-upstream-check.py picks the upstream and SIGHUPs the frontend.
 #
-# install-dns-failover.sh is deliberately not run here: it needs systemd
-# (systemctl, systemd-analyze), the stubby package and a real dnsmasq.service,
-# none of which exist in a plain container, and faking them would test the fakes.
+# Step 5 also runs the real install-dns-failover.sh, to hold what its rollback
+# leaves on disk. A plain container has no systemd, stubby or dnsmasq.service,
+# so systemctl, systemd-analyze and systemd-helper are stand-ins there: that
+# step shows the file handling, not that units start on a real server.
 set -euo pipefail
 
 SRC=${SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
@@ -170,5 +171,98 @@ kill -0 "$sleeper" || fail "non-dnsmasq process was signalled"
 kill "$sleeper" 2>/dev/null || true
 grep -q '"reload_pending": true' "$WORK/other/state.json" || fail "reload_pending not recorded"
 pass "PID file for a non-dnsmasq process refused; reload left pending"
+
+# 5. The installer's rollback. The script, cp, install and dnsmasq --test are
+# real. The systemctl stand-in fails a restart while the installed config has
+# the marker: the start-up failure that dnsmasq --test cannot see.
+if [ -d /run/systemd/system ]; then
+    fail "systemd is running here, so this may be a real server: not running the installer"
+fi
+BACKUPS=/var/lib/dns-failover-backups
+ORIGINAL=$BACKUPS/dnsmasq.conf.before-failover
+STUBS=$WORK/stubs
+mkdir -p "$STUBS" /usr/share/dnsmasq
+cat > "$STUBS/systemctl" <<'STUB'
+#!/bin/sh
+if [ "$1" = restart ] && grep -q e2e-fails-to-start /etc/dnsmasq.conf; then
+    exit 1
+fi
+STUB
+printf '#!/bin/sh\n' > "$STUBS/systemd-analyze"
+printf '#!/bin/sh\n' > /usr/share/dnsmasq/systemd-helper
+chmod +x "$STUBS/systemctl" "$STUBS/systemd-analyze" /usr/share/dnsmasq/systemd-helper
+printf '# site settings\n' > "$WORK/site.expected"
+printf '# reviewed config\n' > "$WORK/good.conf"
+printf '# newer reviewed config\n' > "$WORK/newer.conf"
+printf '# e2e-fails-to-start\n' > "$WORK/bad.conf"
+
+installer_succeeds() {
+    PATH="$STUBS:$PATH" sh "$SRC/install-dns-failover.sh" "$1" >>"$WORK/installer.log" 2>&1 ||
+        fail "installer failed with $1"
+}
+
+installer_fails() {
+    if PATH="$STUBS:$PATH" sh "$SRC/install-dns-failover.sh" "$WORK/bad.conf" >"$WORK/installer.log" 2>&1; then
+        fail "installer exited zero with a config that does not start"
+    fi
+    grep -q 'dnsmasq\.conf\.last-good' "$WORK/installer.log" || fail "installer did not say what it restored"
+}
+
+expect_link() {
+    [ "$(readlink "$1")" = "$2" ] || fail "$1 is not a link to $2: $(ls -l "$1")"
+}
+
+expect_file() {
+    [ ! -L "$1" ] || fail "$1 is a link: $(ls -l "$1")"
+    cmp -s "$1" "$2" || fail "$1 does not match $2"
+}
+
+# A fresh server whose /etc/dnsmasq.conf is the link $1 to the file $2.
+linked_host() {
+    rm -rf "$BACKUPS" /etc/dnsmasq.conf
+    cp "$WORK/site.expected" "$2"
+    ln -s "$1" /etc/dnsmasq.conf
+}
+
+# 5a. Symlinked config, two failed runs in a row: the link and the file it
+# points to both come back, each time.
+# 5b. Symlinked config, a good run, then a failed one: the good run left a
+# regular file, which must come back, and the saved link must not be written
+# through into the site's own file.
+# A relative link dangles in the backup directory, so both shapes are tried.
+for link in "$WORK/site.conf" dnsmasq-site.conf; do
+    case $link in
+        /*) target=$link ;;
+        *) target=/etc/$link ;;
+    esac
+    linked_host "$link" "$target"
+    for _ in 1 2; do
+        installer_fails
+        expect_link /etc/dnsmasq.conf "$link"
+        expect_file "$target" "$WORK/site.expected"
+        expect_link "$ORIGINAL" "$link"
+    done
+    pass "symlink to $link: two failed runs restore the link and its target"
+
+    linked_host "$link" "$target"
+    installer_succeeds "$WORK/good.conf"
+    expect_file /etc/dnsmasq.conf "$WORK/good.conf"
+    installer_fails
+    expect_file /etc/dnsmasq.conf "$WORK/good.conf"
+    expect_file "$target" "$WORK/site.expected"
+    expect_link "$ORIGINAL" "$link"
+    pass "symlink to $link: a later failed run leaves the site's file alone"
+done
+
+# 5c. Regular config: a failed re-run restores what was working a moment ago,
+# not the first-install original, which stays as it was.
+rm -rf "$BACKUPS" /etc/dnsmasq.conf
+cp "$WORK/site.expected" /etc/dnsmasq.conf
+installer_succeeds "$WORK/good.conf"
+installer_succeeds "$WORK/newer.conf"
+installer_fails
+expect_file /etc/dnsmasq.conf "$WORK/newer.conf"
+expect_file "$ORIGINAL" "$WORK/site.expected"
+pass "regular config: a failed re-run restores the last good config"
 
 echo "E2E PASSED"
