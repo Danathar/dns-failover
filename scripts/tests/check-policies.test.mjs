@@ -9,6 +9,7 @@ import {
     checkAll,
     checkCodeowners,
     checkRiskTiers,
+    checkWorkflows,
     classify,
     codeownersPattern,
     codeownersRegExp,
@@ -1038,3 +1039,56 @@ test('repo-target: one --repo does not cover a second gh write on the same line'
     const v = run({ 'docs/a.md': 'gh pr create --repo Danathar/dns-failover && gh pr merge 3\n' });
     assert.ok(v.some((x) => /"gh pr merge" without/.test(x)), v.join('|'));
 });
+
+// ------------------------------------------------ shared regression corpus
+//
+// policies/check-policies-corpus.json is the one table every copy of this
+// checker in the fleet shares (dns-failover, akmods, openaudible-autoupdate,
+// tududi, appbox). Each row is a workflow and the run-expression violations
+// the checker has to report for it, so a bypass fixed in one copy becomes a
+// row, and every copy without the fix fails here. This repository holds the
+// canonical copy: change a row here first, then copy the file to the others,
+// which pin its SHA-256 and compare it with this one every night
+// (Danathar/akmods#245).
+
+const CORPUS_FILE = '.github/workflows/check-policies-corpus.yml';
+const corpus = JSON.parse(read('policies/check-policies-corpus.json'));
+
+/** The run-expression violations checkWorkflows reports for one corpus workflow. */
+function corpusFindings(workflow) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-policies-corpus-'));
+    try {
+        const file = path.join(dir, CORPUS_FILE);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, `${workflow.join('\n')}\n`);
+        return checkWorkflows(dir, JSON.parse(WORKFLOWS), [CORPUS_FILE])
+            .map((v) => v.match(/^(.+?):(\d+): \$\{\{\s*(.*?)\s*\}\} in a run script/))
+            .filter((m) => m && m[1] === CORPUS_FILE)
+            .map((m) => ({ line: Number(m[2]), expression: m[3] }));
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+test('corpus: every row is well formed and has a unique id', () => {
+    assert.equal(corpus.schema, 1);
+    assert.ok(corpus.rows.length > 0);
+    const ids = new Set();
+    for (const row of corpus.rows) {
+        assert.match(row.id, /^[a-z0-9-]+$/);
+        assert.ok(!ids.has(row.id), `duplicate corpus id ${row.id}`);
+        ids.add(row.id);
+        assert.equal(typeof row.why, 'string', `${row.id}: why`);
+        assert.ok(row.workflow.every((l) => typeof l === 'string'), `${row.id}: workflow`);
+        for (const v of row.violations) {
+            assert.ok(Number.isInteger(v.line) && v.line >= 1 && v.line <= row.workflow.length, `${row.id}: line`);
+            assert.ok(row.workflow[v.line - 1].includes(v.expression), `${row.id}: line ${v.line} names ${v.expression}`);
+        }
+    }
+});
+
+for (const row of corpus.rows) {
+    test(`corpus ${row.id}`, () => {
+        assert.deepEqual(corpusFindings(row.workflow), row.violations, `${row.id}: ${row.why}`);
+    });
+}

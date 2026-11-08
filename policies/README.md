@@ -60,6 +60,25 @@ For every `.github/workflows/*.yml`:
   through `env:` and read `"$VAR"` (see `forbiddenRunExpressions`). Numbers,
   SHAs and `github.event.repository.name` are allowed.
 
+## check-policies-corpus.json
+
+Not a policy the checker reads: a regression table its tests replay. Six
+repositories carry their own copy of `scripts/check-policies.mjs`, and a fix
+to one copy does not reach the others
+([Danathar/akmods#245](https://github.com/Danathar/akmods/issues/245)). Each
+row is one workflow file (`workflow`, one string per line) and every
+run-expression violation the checker must report for it (`violations`, each a
+`line` and an `expression`; an empty list means the workflow must pass).
+`scripts/tests/check-policies.test.mjs` writes each row to a scratch
+`.github/workflows/` directory, runs `checkWorkflows` with this repository's
+`workflow-permissions.json`, and requires exactly those violations.
+
+This repository holds the canonical copy. A fix to any copy of the checker
+adds a row here first, with the workflow the old code let through. The file is
+then copied byte for byte to akmods, openaudible-autoupdate, tududi and
+appbox, which pin its SHA-256 in their checker tests and compare their copy
+with this one on `main` every night, so a copy that is behind fails.
+
 ## installer-safety.json
 
 Guards `install-dns-failover.sh`, the root installer that replaces
