@@ -46,7 +46,7 @@ runpy.run_path(script, run_name="__main__")
 
 def config_with_mode(tmp_path, mode):
     path = tmp_path / "config.json"
-    path.write_text('{"tailnet": "-", "client_id": "id-placeholder", "client_secret": "secret-placeholder",'
+    path.write_text('{"tailnet": "-", "client_id": "id-placeholder", "client_secret": "<client-secret>",'
                     ' "expected_resolver_id": "profile-placeholder"}\n')
     path.chmod(mode)
     return path
@@ -61,7 +61,7 @@ LAUNCHES = [
     ("tailscale-dns-failover/monitor.py", "monitor-config-readable-by-others",
      lambda tmp: ["--config", str(config_with_mode(tmp, 0o644)), "--state", str(tmp / "state.json")],
      1, MONITOR_PREFIX + "RuntimeError: Credential configuration must have permissions 0600\n",
-     ("secret-placeholder", "id-placeholder")),
+     ("<client-secret>", "id-placeholder")),
     ("dns-upstream-probe.py", "probe-no-arguments",
      lambda tmp: [],
      2, "usage:", ()),
