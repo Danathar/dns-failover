@@ -75,6 +75,10 @@ checked.
   ([`policies/credential-safety.json`](../policies/credential-safety.json)).
 - **Site-specific data.** No credential-shaped string and no real ControlD
   profile ID anywhere in the repository (same policy).
+- **Shared temporary directory.** No shipped file names a fixed-name path
+  directly under the shared temporary directory, where any account can claim
+  the name first
+  ([`policies/temp-path-safety.json`](../policies/temp-path-safety.json)).
 - **Failover decision.** `dns-upstream-check.py` switches to the backup after
   one failed primary check only when the backup answers, returns after three
   healthy primary checks, keeps the selection when both fail, writes its files

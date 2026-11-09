@@ -127,6 +127,27 @@ vacuously. The rules are `required` (a line must match), `forbidden` (none may),
   never by value. Build fake secrets in tests at run time (concatenation) so the
   test file itself stays clean.
 
+## temp-path-safety.json
+
+- Every text file (binary and files over 1 MB are skipped) is scanned line by
+  line for a fixed-name path directly under the shared temporary directory:
+  the `pattern`, a `tmp` folder at the filesystem root followed by one name.
+  A match counts only when it starts an absolute path, so a `tmp` folder under
+  `/var` or `/run/user/1000`, and URL paths, are not hits, while the same path
+  after `=`, after `-I` or inside backticks is.
+- `excludeGlobs` (files that are not shipped): `tests/**`, `**/tests/**`,
+  `**/fixtures/**`, `.claude/**`, and the policy file itself, whose `allowed`
+  list names the paths.
+- `allowed` lists `{ "path", "tmpPath", "why" }` exceptions. A hit passes only
+  when both its file and its exact path are listed, so a new name in a listed
+  file still fails. An entry that matches no line is a violation, so the list
+  cannot go stale. It starts empty.
+- The message names file, line and path and points to the safe alternatives:
+  `RuntimeDirectory=` or `StateDirectory=`, `PrivateTmp=yes`, `mktemp -d`, or a
+  root-owned directory under `/run` created with `install -d -m 0700`.
+- Why: another account can create a fixed-name folder first and then control
+  what a root-run command reads from it.
+
 ## CODEOWNERS and risk tiers
 
 Not JSON policy files. The checker compares the tier table in
