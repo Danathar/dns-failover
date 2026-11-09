@@ -1,7 +1,7 @@
 name: Policy check
 
 # Runs scripts/check-policies.mjs: the repo-target, workflow-permissions,
-# installer-safety and credential-safety policies in policies/, the drift check
+# installer-safety, credential-safety and temp-path-safety policies in policies/, the drift check
 # between docs/risk-tiers.md and risk-config.json, and CODEOWNERS coverage of
 # owner-review paths; then the checker's own tests. Node built-ins only, so
 # there is no npm install. See policies/README.md.

@@ -205,8 +205,21 @@ The current upstream remains selected. Restart monitoring with
 `sudo systemctl enable --now dns-upstream-check.timer`.
 
 The optional test configuration expects
-`/tmp/dns-failover-test/servers.conf` to exist. Create that directory and a file
-containing `server=127.0.0.1#5453` before using it. Its listener is loopback port
+`/run/dns-failover-test/servers.conf` to exist. Create the directory and the
+file as root before using it:
+
+```sh
+sudo install -d -o root -g dnsmasq -m 0750 /run/dns-failover-test
+echo 'server=127.0.0.1#5453' | sudo tee /run/dns-failover-test/servers.conf
+```
+
+The directory is not in the shared `/tmp`, where another account could claim the
+name first and feed dnsmasq its own upstream. Only root can write to it. The
+`dnsmasq` group can read it because dnsmasq drops root after it starts and
+re-reads `servers-file` as its own user when it receives SIGHUP; the directory
+is closed to every other account. (If your system runs dnsmasq as a different
+user, use that user's group instead.) `/run` is cleared at reboot, so repeat
+these two commands before each test session. Its listener is loopback port
 5533, separate from production DNS. Its DNSSEC settings include a public root
 trust anchor from the original test; keep trust anchors current for future use.
 

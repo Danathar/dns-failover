@@ -9,6 +9,7 @@ import {
     checkAll,
     checkCodeowners,
     checkRiskTiers,
+    checkTempPaths,
     checkWorkflows,
     classify,
     codeownersPattern,
@@ -25,6 +26,7 @@ const FORK = read('policies/repo-target.json');
 const WORKFLOWS = read('policies/workflow-permissions.json');
 const INSTALLER_POLICY = read('policies/installer-safety.json');
 const CREDENTIAL_POLICY = read('policies/credential-safety.json');
+const TEMP_POLICY = read('policies/temp-path-safety.json');
 const CODEOWNERS = read('.github/CODEOWNERS');
 const INSTALLER = read('install-dns-failover.sh');
 const CONFIGURE = read('tailscale-dns-failover/configure.py');
@@ -65,6 +67,7 @@ function fixture(files) {
         'policies/workflow-permissions.json': WORKFLOWS,
         'policies/installer-safety.json': INSTALLER_POLICY,
         'policies/credential-safety.json': CREDENTIAL_POLICY,
+        'policies/temp-path-safety.json': TEMP_POLICY,
         'install-dns-failover.sh': INSTALLER,
         'tailscale-dns-failover/configure.py': CONFIGURE,
         'tailscale-dns-failover/monitor.py': MONITOR,
@@ -596,6 +599,7 @@ test('missing policy files are violations', () => {
         assert.match(v, /policies\/workflow-permissions\.json: missing/);
         assert.match(v, /policies\/installer-safety\.json: missing/);
         assert.match(v, /policies\/credential-safety\.json: missing/);
+        assert.match(v, /policies\/temp-path-safety\.json: missing/);
         assert.match(v, /risk-config\.json: missing/);
         assert.match(v, /\.github\/CODEOWNERS: missing/);
     } finally {
@@ -849,6 +853,75 @@ test('secret scan: binary files are skipped', () => {
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
+});
+
+// ---- temp-path-safety (fixed names in the shared temporary directory)
+
+// Built at run time so this test file never holds a path the policy would flag.
+const TMP = '/' + 'tmp';
+const TEST_CONF = 'dnsmasq-failover-test.conf.example';
+const tempPolicy = (allowed) => JSON.stringify({ ...JSON.parse(TEMP_POLICY), allowed });
+
+test('temp-path-safety: the real tree passes, and the real policy starts with no exceptions', () => {
+    assert.deepEqual(checkTempPaths(repoRoot, JSON.parse(TEMP_POLICY), walk(repoRoot)), []);
+    assert.deepEqual(JSON.parse(TEMP_POLICY).allowed, []);
+    assert.ok(read(TEST_CONF).includes('servers-file=/run/dns-failover-test/servers.conf'));
+});
+
+test('temp-path-safety: a fixed name planted in a shipped file fails, with file, line and path', () => {
+    const planted = `servers-file=${TMP}/x/servers.conf`;
+    const v = run({ [TEST_CONF]: `${read(TEST_CONF)}${planted}\n` });
+    const line = read(TEST_CONF).split('\n').length;
+    assert.equal(v.length, 1, v.join('|'));
+    assert.match(v[0], new RegExp(`^${TEST_CONF.replace(/\./g, '\\.')}:${line}: ${TMP}/x `));
+    assert.match(v[0], /RuntimeDirectory=/);
+    assert.match(v[0], /mktemp -d/);
+    assert.match(v[0], /install -d -m 0700/);
+});
+
+test('temp-path-safety: option, backtick and bare forms are hits', () => {
+    for (const body of [`-I${TMP}/x`, `\`${TMP}/x\``, `cd ${TMP}/x.d`, `${TMP}/x`]) {
+        const v = run({ 'notes.txt': `${body}\n` });
+        assert.equal(v.length, 1, body);
+        assert.match(v[0], /^notes\.txt:1: /);
+    }
+});
+
+test('temp-path-safety: the same text under tests, fixtures or .claude passes', () => {
+    const body = `servers-file=${TMP}/x/servers.conf\n`;
+    for (const f of ['tests/a.conf', 'scripts/tests/a.mjs', 'tests/fixtures/a.json', 'pkg/fixtures/a.json', '.claude/hooks/a.mjs']) {
+        assert.deepEqual(run({ [f]: body }), [], f);
+    }
+});
+
+test('temp-path-safety: a tmp folder that is not at the root, and URL paths, pass', () => {
+    const ok = [`/var/tmp/x`, `/run/user/1000/tmp/x`, `https://example.com/tmp/x`, `${TMP}/`, `${TMP}`];
+    assert.deepEqual(run({ 'notes.txt': ok.join('\n') + '\n' }), []);
+});
+
+test('temp-path-safety: an allowed (file, path) pair passes, a different name in the same file fails', () => {
+    const policy = tempPolicy([{ path: 'notes.txt', tmpPath: `${TMP}/x`, why: 'reviewed' }]);
+    assert.deepEqual(run({ 'policies/temp-path-safety.json': policy, 'notes.txt': `use ${TMP}/x\n` }), []);
+    const v = run({ 'policies/temp-path-safety.json': policy, 'notes.txt': `use ${TMP}/x\nuse ${TMP}/y\n` });
+    assert.equal(v.length, 1, v.join('|'));
+    assert.match(v[0], new RegExp(`^notes\\.txt:2: ${TMP}/y `));
+    // The same name in a different file is not covered either.
+    const other = run({ 'policies/temp-path-safety.json': policy, 'notes.txt': `use ${TMP}/x\n`, 'other.txt': `use ${TMP}/x\n` });
+    assert.equal(other.length, 1, other.join('|'));
+    assert.match(other[0], /^other\.txt:1: /);
+});
+
+test('temp-path-safety: an allowed entry that matches nothing fails', () => {
+    const policy = tempPolicy([{ path: 'notes.txt', tmpPath: `${TMP}/x`, why: 'reviewed' }]);
+    const v = run({ 'policies/temp-path-safety.json': policy, 'notes.txt': 'nothing here\n' });
+    assert.equal(v.length, 1, v.join('|'));
+    assert.match(v[0], new RegExp(`allowed entry notes\\.txt ${TMP}/x matches no line`));
+});
+
+test('temp-path-safety: an allowed entry without a reason is a violation', () => {
+    const policy = tempPolicy([{ path: 'notes.txt', tmpPath: `${TMP}/x` }]);
+    const v = run({ 'policies/temp-path-safety.json': policy, 'notes.txt': `use ${TMP}/x\n` });
+    assert.ok(v.some((x) => /needs a non-empty path, tmpPath and why/.test(x)), v.join('|'));
 });
 
 // ---- CODEOWNERS

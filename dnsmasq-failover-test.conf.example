@@ -4,7 +4,7 @@ bind-interfaces
 no-hosts
 no-resolv
 cache-size=1000
-servers-file=/tmp/dns-failover-test/servers.conf
+servers-file=/run/dns-failover-test/servers.conf
 conf-file=/usr/share/dnsmasq/trust-anchors.conf
 trust-anchor=.,38696,8,2,683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16
 dnssec

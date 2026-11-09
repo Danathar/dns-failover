@@ -15,6 +15,7 @@
  *   4. policies/credential-safety.json  root-only credentials, auto_restore off, no secrets or profile IDs
  *   5. docs/risk-tiers.md vs risk-config.json  tier table drift
  *   6. .github/CODEOWNERS vs risk-config.json  owner-review paths are listed
+ *   7. policies/temp-path-safety.json   no shipped file names a fixed folder in the shared temporary directory
  *
  * Node built-ins only. Exit code 1 when any violation is found.
  */
@@ -265,6 +266,49 @@ export function checkSecretScan(root, scan, files) {
                 }
             }
         });
+    }
+    return v;
+}
+
+/**
+ * No shipped file may name a fixed-name path directly under the shared
+ * temporary directory: any account can create that name first. A hit is a
+ * `pattern` match that starts an absolute path (the text before it does not
+ * end in `/name`), so `/var/tmp/x` and URL paths are not hits. `allowed`
+ * lists { path, tmpPath, why } exceptions; a hit passes only when both its
+ * file and its exact path are listed, and an entry that matches no line is
+ * itself a violation so the list cannot go stale.
+ */
+export function checkTempPaths(root, policy, files) {
+    const v = [];
+    const re = new RegExp(policy.pattern, 'g');
+    const precededByName = /\/[A-Za-z0-9._-]+$/;
+    const allowed = new Map();
+    for (const a of policy.allowed ?? []) {
+        if (![a?.path, a?.tmpPath, a?.why].every((s) => typeof s === 'string' && s !== '')) {
+            v.push('temp-path-safety: every "allowed" entry needs a non-empty path, tmpPath and why');
+            continue;
+        }
+        allowed.set(`${a.path}\0${a.tmpPath}`, { ...a, used: false });
+    }
+    for (const f of files) {
+        if (matchesAny(policy.excludeGlobs ?? [], f)) continue;
+        const buf = fs.readFileSync(path.join(root, f));
+        if (buf.length > 1_000_000 || buf.includes(0)) continue;
+        buf.toString('utf8').split(/\r?\n/).forEach((l, i) => {
+            for (const m of l.matchAll(re)) {
+                if (precededByName.test(l.slice(0, m.index))) continue;
+                const hit = allowed.get(`${f}\0${m[0]}`);
+                if (hit) {
+                    hit.used = true;
+                    continue;
+                }
+                v.push(`${f}:${i + 1}: ${m[0]} is a fixed name in the shared temporary directory, which any account can claim first; use RuntimeDirectory=/StateDirectory=, PrivateTmp=yes, mktemp -d, or a root-owned directory under /run created with install -d -m 0700`);
+            }
+        });
+    }
+    for (const a of allowed.values()) {
+        if (!a.used) v.push(`policies/temp-path-safety.json: allowed entry ${a.path} ${a.tmpPath} matches no line; remove it`);
     }
     return v;
 }
@@ -697,6 +741,9 @@ export function checkAll(root) {
         violations.push(...checkFileRules(root, cred, 'credential-safety'));
         violations.push(...checkSecretScan(root, cred.secretScan, files));
     }
+
+    const temp = readJson(root, 'policies/temp-path-safety.json', violations);
+    if (temp) violations.push(...checkTempPaths(root, temp, files));
 
     const config = readJson(root, 'risk-config.json', violations);
     const docPath = path.join(root, 'docs/risk-tiers.md');
