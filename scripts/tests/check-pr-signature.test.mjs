@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,6 +24,40 @@ test('a body with the signature line passes', () => {
     const r = run(`**Summary:** x\n\nRefs #3\n\n${SIG}\n`);
     assert.equal(r.code, 0);
     assert.equal(r.err, '');
+    assert.equal(r.out, 'The pull request body has a `— hive: agent=...` signature line.\n');
+});
+
+test('a failing body gets the full error text', () => {
+    const r = run('nothing here');
+    assert.equal(
+        r.err,
+        '::error::The pull request body has no `— hive: agent=<name> ...` signature line ' +
+            '(outside code blocks). The weekly agent audit (agent-audit.yml) will flag this ' +
+            'PR once merged. Edit the PR description to add the line; this check reruns on edit.\n',
+    );
+    assert.equal(r.out, '');
+});
+
+// Run as a script (what the workflow does): the entry-point guard must call
+// main() and set the exit code from it.
+const SCRIPT = path.resolve(here, '..', 'check-pr-signature.mjs');
+function runScript(body) {
+    const r = spawnSync(process.execPath, [SCRIPT], {
+        env: { ...process.env, PR_BODY: body },
+        encoding: 'utf8',
+    });
+    return { code: r.status, out: r.stdout, err: r.stderr };
+}
+
+test('run as a script it exits 0 with the signature line and 1 without', () => {
+    const ok = runScript(`x\n\n${SIG}\n`);
+    assert.equal(ok.code, 0);
+    assert.match(ok.out, /signature line\.\n$/);
+    assert.equal(ok.err, '');
+    const bad = runScript('nothing here');
+    assert.equal(bad.code, 1);
+    assert.match(bad.err, /^::error::The pull request body has no /);
+    assert.equal(bad.out, '');
 });
 
 test('a body without the line, an empty body and no body fail with an error annotation', () => {
