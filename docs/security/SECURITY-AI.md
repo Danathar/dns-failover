@@ -136,8 +136,8 @@ check on credential-shaped strings and on any ControlD profile ID that is not a
 placeholder; it reports file and line, never the value.
 
 Shipped files never name a fixed-name path directly under a shared temporary
-directory (`/tmp`, `/var/tmp` or `/dev/shm`, in any spelling the shell resolves
-to the same path). Any account can create that name first and control what a
+directory (`/tmp`, `/var/tmp` or `/dev/shm`, in the quoted, doubled-slash and
+variable spellings listed in `policies/README.md`). Any account can create that name first and control what a
 root-run command reads. Use `RuntimeDirectory=` or `StateDirectory=`, `PrivateTmp=yes`,
 `mktemp -d`, or a root-owned directory under `/run` made with
 `install -d -m 0700`. `policies/temp-path-safety.json` fails the check on a new
