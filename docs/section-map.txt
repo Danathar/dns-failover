@@ -45,6 +45,8 @@
   prose: narrative: where session state is written
 ## Pull requests
   prose: narrative: how to write a pull request
+## Owner's standing decisions
+  prose: narrative: a standing ruling on which owner questions agents decide themselves
 
 [CLAUDE.md]
 ## Claude Code notes
