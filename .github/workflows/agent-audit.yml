@@ -9,6 +9,10 @@ name: Agent audit trail
 # a merger that is a human or the Hive App itself (the hive-serialized lane, reported separately; any other bot or an unknown merger is a violation), and base `main` of
 # Danathar/dns-failover. The result goes to the run summary.
 #
+# The signature requirement is also checked on open agent PRs, while the body
+# can still be fixed, by `agent-signature.yml` (scripts/check-pr-signature.mjs,
+# which calls this script's findSignature).
+#
 # Failure model: a violation fails the run (`--strict`). It does not open an
 # issue. A red scheduled run is already visible in the Actions tab and in
 # GitHub's failure notifications, and keeping the token read-only (no
