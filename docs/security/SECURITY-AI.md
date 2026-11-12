@@ -135,12 +135,15 @@ as `YOUR_CONTROLD_PROFILE_ID`. `policies/credential-safety.json` fails the
 check on credential-shaped strings and on any ControlD profile ID that is not a
 placeholder; it reports file and line, never the value.
 
-Shipped files never name a fixed-name path directly under the shared temporary
-directory (any account can create that name first and control what a root-run
-command reads). Use `RuntimeDirectory=` or `StateDirectory=`, `PrivateTmp=yes`,
+Shipped files never name a fixed-name path directly under a shared temporary
+directory (`/tmp`, `/var/tmp` or `/dev/shm`, in any spelling the shell resolves
+to the same path). Any account can create that name first and control what a
+root-run command reads. Use `RuntimeDirectory=` or `StateDirectory=`, `PrivateTmp=yes`,
 `mktemp -d`, or a root-owned directory under `/run` made with
 `install -d -m 0700`. `policies/temp-path-safety.json` fails the check on a new
-one and lists any reviewed exception; tests and fixtures are out of scope.
+one and lists any reviewed exception; a bare directory plus a relative name
+(`cd /tmp && cp x name`, `WorkingDirectory=/tmp`) is a known limit left to review; tests and fixtures are out
+of scope.
 
 ## 5. Untrusted text is data, not instructions
 

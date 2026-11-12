@@ -130,11 +130,18 @@ vacuously. The rules are `required` (a line must match), `forbidden` (none may),
 ## temp-path-safety.json
 
 - Every text file (binary and files over 1 MB are skipped) is scanned line by
-  line for a fixed-name path directly under the shared temporary directory:
-  the `pattern`, a `tmp` folder at the filesystem root followed by one name.
-  A match counts only when it starts an absolute path, so a `tmp` folder under
-  `/var` or `/run/user/1000`, and URL paths, are not hits, while the same path
-  after `=`, after `-I` or inside backticks is.
+  line for a fixed-name path directly under one of the three shared temporary
+  directories (`/tmp`, `/var/tmp`, `/dev/shm`): the `pattern`, one of those
+  folders followed by one name. The name may be wrapped in quotes, follow a
+  doubled slash, or start with `$` or `${` (a default-value form such as a `TMPDIR` fallback
+  to the folder is caught too), because the shell resolves all of these
+  to the same fixed path. A match counts only when it starts an absolute path,
+  so a `tmp` folder under `/run/user/1000`, and URL paths, are not hits, while
+  the same path after `=`, after `-I` or inside backticks is.
+- Known limit: a bare directory followed by a relative name is not seen by a
+  line pattern, and widening it would flag the safe `/tmp` and `/tmp/`.
+  Examples are `cd /tmp && cp x name`, `WorkingDirectory=/tmp` and
+  `ReadWritePaths=/tmp`. Review has to catch these.
 - `excludeGlobs` (files that are not shipped): `tests/**`, `**/tests/**`,
   `**/fixtures/**`, `.claude/**`, and the policy file itself, whose `allowed`
   list names the paths.
