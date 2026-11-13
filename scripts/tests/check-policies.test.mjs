@@ -885,6 +885,8 @@ test('temp-path-safety: option, backtick and bare forms are hits', () => {
         `\${TMPDIR:-${TMP}}/x`, `${TMP}//x`, `"${TMP}"/x`, `${TMP}/"x"`, `${TMP}/'x'`,
         `${TMP}/\${X}`, `${TMP}/$X`, `${TMP}/\\x`,
         '/var/tmp/x', '/dev/shm/x',
+        `"\${TMPDIR:-${TMP}}"/x`, `${TMP}/"$X"`, `${TMP}/"\${X}"`, `${TMP}/'$X'`, `${TMP}/\\$X`,
+        `${TMP}/{name}`, `${TMP}/%s.lock`, `${TMP}/~x`, `${TMP}/@x`, `${TMP}/+x`,
     ];
     for (const body of bodies) {
         const v = run({ 'notes.txt': `${body}\n` });
@@ -901,7 +903,7 @@ test('temp-path-safety: the same text under tests, fixtures or .claude passes', 
 });
 
 test('temp-path-safety: a tmp folder that is not at the root, URL paths, bare directories and unset variables pass', () => {
-    const ok = [`/run/user/1000/tmp/x`, `https://example.com/tmp/x`, `https://example.com/var/tmp/x`, `${TMP}/`, `${TMP}`, `\${TMPDIR}/x`];
+    const ok = [`/run/user/1000/tmp/x`, `https://example.com/tmp/x`, `https://example.com/var/tmp/x`, `${TMP}/`, `${TMP}`, `\${TMPDIR}/x`, `"${TMP}/"`, `'${TMP}'`, `"\${TMPDIR:-${TMP}}"`];
     assert.deepEqual(run({ 'notes.txt': ok.join('\n') + '\n' }), []);
 });
 
