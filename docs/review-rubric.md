@@ -199,8 +199,9 @@ The README says the site specifics were removed for sharing; keep it true.
 
 ## 7. Housekeeping
 
-- [ ] Commits follow Conventional Commits; the PR title does too. No
-      `Signed-off-by` trailers unless the owner asked.
+- [ ] Commits follow Conventional Commits; the PR title does too. Every
+      commit carries a `Signed-off-by` trailer (`git commit -s`); the hive
+      holds a pull request with an unsigned commit (`no-dco`).
 - [ ] Docs changed with behaviour: the README, and `AGENTS.md`/`CLAUDE.md` if
       a rule or command changed. Code is cited by function or symbol name,
       never by bare line number.
