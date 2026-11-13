@@ -880,7 +880,13 @@ test('temp-path-safety: a fixed name planted in a shipped file fails, with file,
 });
 
 test('temp-path-safety: option, backtick and bare forms are hits', () => {
-    for (const body of [`-I${TMP}/x`, `\`${TMP}/x\``, `cd ${TMP}/x.d`, `${TMP}/x`]) {
+    const bodies = [
+        `-I${TMP}/x`, `\`${TMP}/x\``, `cd ${TMP}/x.d`, `${TMP}/x`,
+        `\${TMPDIR:-${TMP}}/x`, `${TMP}//x`, `"${TMP}"/x`, `${TMP}/"x"`, `${TMP}/'x'`,
+        `${TMP}/\${X}`, `${TMP}/$X`, `${TMP}/\\x`,
+        '/var/tmp/x', '/dev/shm/x',
+    ];
+    for (const body of bodies) {
         const v = run({ 'notes.txt': `${body}\n` });
         assert.equal(v.length, 1, body);
         assert.match(v[0], /^notes\.txt:1: /);
@@ -894,8 +900,8 @@ test('temp-path-safety: the same text under tests, fixtures or .claude passes', 
     }
 });
 
-test('temp-path-safety: a tmp folder that is not at the root, and URL paths, pass', () => {
-    const ok = [`/var/tmp/x`, `/run/user/1000/tmp/x`, `https://example.com/tmp/x`, `${TMP}/`, `${TMP}`];
+test('temp-path-safety: a tmp folder that is not at the root, URL paths, bare directories and unset variables pass', () => {
+    const ok = [`/run/user/1000/tmp/x`, `https://example.com/tmp/x`, `https://example.com/var/tmp/x`, `${TMP}/`, `${TMP}`, `\${TMPDIR}/x`];
     assert.deepEqual(run({ 'notes.txt': ok.join('\n') + '\n' }), []);
 });
 

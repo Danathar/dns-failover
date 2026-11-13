@@ -274,7 +274,9 @@ export function checkSecretScan(root, scan, files) {
  * No shipped file may name a fixed-name path directly under the shared
  * temporary directory: any account can create that name first. A hit is a
  * `pattern` match that starts an absolute path (the text before it does not
- * end in `/name`), so `/var/tmp/x` and URL paths are not hits. `allowed`
+ * end in `/name`), so `/run/user/1000/tmp/x` and URL paths are not hits. The
+ * pattern also catches a doubled slash, quotes, a closing brace or a variable
+ * name around the fixed name (see the test rows). `allowed`
  * lists { path, tmpPath, why } exceptions; a hit passes only when both its
  * file and its exact path are listed, and an entry that matches no line is
  * itself a violation so the list cannot go stale.

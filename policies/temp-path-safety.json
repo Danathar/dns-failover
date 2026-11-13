@@ -1,6 +1,6 @@
 {
-    "$comment": "Keeps shipped files from naming a fixed-name path directly under the shared temporary directory, where any account can create the name first. Evaluated by scripts/check-policies.mjs (checkTempPaths; this file is excluded because its allowed list names the paths). See policies/README.md and docs/security/SECURITY-AI.md, section 'Site-specific data'.",
-    "pattern": "/tmp/[A-Za-z0-9._-]+",
+    "$comment": "Keeps shipped files from naming a fixed-name path directly under a shared temporary directory (/tmp, /var/tmp or /dev/shm), where any account can create the name first. Evaluated by scripts/check-policies.mjs (checkTempPaths; this file is excluded because its allowed list names the paths). See policies/README.md and docs/security/SECURITY-AI.md, section 'Site-specific data'.",
+    "pattern": "/(?:var/tmp|dev/shm|tmp)[\"'}]?/+[\"'\\\\$]?\\{?[A-Za-z0-9._-]+",
     "excludeGlobs": [
         "tests/**",
         "**/tests/**",
