@@ -61,8 +61,9 @@ other tool too.
   threshold needs explicit owner approval and README updates.
 - Python stays standard-library only and must run on Python 3.11 (Debian 12).
   Shell stays POSIX `sh`.
-- Never commit secrets or tokens. Do not `git commit -s`; use Conventional
-  Commits (`fix:`, `feat:`, `docs:`, `test:`, `ci:`, `chore:`).
+- Never commit secrets or tokens. Sign off every commit (`git commit -s`);
+  the hive holds a pull request with an unsigned commit (`no-dco`). Use
+  Conventional Commits (`fix:`, `feat:`, `docs:`, `test:`, `ci:`, `chore:`).
 - Every `gh` write command passes `--repo Danathar/dns-failover`. Never act
   on any other repository.
 - Do not edit repo settings, labels or rulesets; do not merge your own PRs.
@@ -164,6 +165,12 @@ still apply to the pull request; this section only removes the question.
   need no new permission, secret or token scope. Take your own
   recommendation. Between options, pick the stricter one that still passes
   the current tree, and fix any existing hits in the same PR.
+  This holds even when the narrower behavior is written down or pinned by a
+  test (a README sentence, a code comment, a "passes by design" test row, a
+  note such as "a human edits this file"): turning a documented pass into a
+  hit is widening, not overturning an owner decision. Only adding an
+  allow-list entry or exception, removing a rule, or narrowing a match is
+  loosening.
 - **Repeating an earlier decision.** A change the owner already approved in
   another `Danathar/*` repository: the same check, the same workflow fix, the
   same signature or record-line rollout. It is approved here too. Link the
