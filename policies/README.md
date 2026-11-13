@@ -134,8 +134,10 @@ vacuously. The rules are `required` (a line must match), `forbidden` (none may),
   directories (`/tmp`, `/var/tmp`, `/dev/shm`): the `pattern`, one of those
   folders followed by one name. The name may be wrapped in quotes, follow a
   doubled slash, or start with `$` or `${` (a default-value form such as a `TMPDIR` fallback
-  to the folder is caught too), because the shell resolves all of these
-  to the same fixed path. A match counts only when it starts an absolute path,
+  to the folder is caught too, quoted or not), because the shell resolves all of these
+  to the same fixed path. Quotes, `\`, `$` and `{` may be stacked in front of
+  the name (`"$NAME"`, `"${NAME}"`, a Python `{name}` slot), and the name may
+  use `%`, `@`, `+` or `~` (a `%s` format slot is a fixed spelling too). A match counts only when it starts an absolute path,
   so a `tmp` folder under `/run/user/1000`, and URL paths, are not hits, while
   the same path after `=`, after `-I` or inside backticks is.
 - Known limit: a bare directory followed by a relative name is not seen by a
