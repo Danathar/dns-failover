@@ -272,6 +272,12 @@ const blocked = [
     ['git --no-pager --git-dir=evil show', '--git-dir'],
     ['git -c user.name=x --git-dir=evil log -p', '--git-dir'],
     ['cd tests && git --git-dir=../evil show', '--git-dir'],
+    // a value-taking global option in front: its value must be skipped, not read
+    // as the subcommand, or the walk stops before reaching --git-dir
+    ['git -C . --git-dir=evil show', '--git-dir'],
+    ['git --namespace x --git-dir=evil show', '--git-dir'],
+    ['git --config-env user.name=V --git-dir=evil show', '--git-dir'],
+    ['git --work-tree=/etc diff --stat', 'Run git from the project without it'],
     ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.external GIT_CONFIG_VALUE_0=./x.sh git diff', 'GIT_CONFIG_COUNT'],
     ['gh pr create', 'no --repo'],
     ['gh pr create --title t --body b', 'no --repo'],
