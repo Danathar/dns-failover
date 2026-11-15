@@ -87,3 +87,34 @@ test('a committed bare repository cannot make a pre-approved git show or git log
     assert.equal(git(victim, agentEnv, 'status', '--short').status, 0);
     assert.equal(git(victim, agentEnv, 'log', '-1', '--format=%s').stdout.trim(), 'x');
 });
+
+// safe.bareRepository=explicit allows a bare repository that is named on the
+// command line, so the setting alone does not stop `git --git-dir=evil show`
+// or `git --bare show` run inside it. The guard hook refuses those options.
+test('a named bare repository still runs the program, so the guard hook refuses it', (t) => {
+    const dir = mkdtempSync(join(tmpdir(), 'bare-repo-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const marker = join(dir, 'ran');
+    const victim = plantedClone(dir, marker);
+    const agentEnv = { ...baseEnv(dir), ...settingsEnv };
+    const hook = fileURLToPath(new URL('../../.claude/hooks/guard-bash.mjs', import.meta.url));
+
+    for (const [cwd, args] of [
+        [victim, ['--git-dir=evil', 'log', '-p', '-1']],
+        [victim, ['--git-dir', 'evil', 'show']],
+        [join(victim, 'evil'), ['--bare', 'show']],
+        [join(victim, 'evil'), ['--bare', 'log', '-p', '-1']],
+    ]) {
+        const command = `git ${args.join(' ')}`;
+        git(cwd, agentEnv, ...args);
+        assert.ok(existsSync(marker), `${command} no longer runs the program; this test needs a new route`);
+        rmSync(marker);
+
+        const r = spawnSync(process.execPath, [hook], {
+            input: JSON.stringify({ tool_name: 'Bash', tool_input: { command } }),
+            encoding: 'utf8',
+        });
+        assert.equal(r.status, 2, `the guard hook should refuse ${command}: ${r.stderr}`);
+        assert.match(r.stderr, /--git-dir|--bare/);
+    }
+});

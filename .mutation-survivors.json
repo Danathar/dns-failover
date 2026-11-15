@@ -196,6 +196,13 @@
             "original": "'&'",
             "replacement": "\"\"",
             "reason": "closeParen() (akmods#215 reader): equivalent in the `;;&` skip, as for `input[j + 1] === ';'` -> true: it only changes whether one more `;` or `&` separator is read in pattern state."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "Regex",
+            "original": "/^--(?:git-dir|work-tree)=/",
+            "replacement": "/--(?:git-dir|work-tree)=/",
+            "reason": "Harmless over-refusal: the test runs only on a global option, which already starts with `-`. Without the anchor it also refuses an option such as `-c--git-dir=x` that merely contains `--git-dir=` or `--work-tree=`, so the guard refuses more, never less."
         }
     ]
 }
