@@ -456,7 +456,18 @@ function checkGit(args, inlineEnv = {}, exported = {}) {
         if (a.startsWith('--exec-path=')) {
             return block('Blocked: `git --exec-path=DIR` runs git commands from another directory.');
         }
-        i += ['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'].includes(a) ? 2 : 1;
+        // safe.bareRepository=explicit (.claude/settings.json) refuses a bare
+        // repository git finds by itself, but allows one that is named, and
+        // these options name it: a bare repository committed in a branch could
+        // then run its diff.*.textconv program. --work-tree reads outside the
+        // project. git matches these global options exactly, not by prefix.
+        if (['--git-dir', '--bare', '--work-tree'].includes(a) || /^--(?:git-dir|work-tree)=/.test(a)) {
+            return block(
+                `Blocked: \`git ${a.split('=')[0]}\` points git at another repository or work tree, ` +
+                    'whose config can make git run a program. Run git from the project without it.'
+            );
+        }
+        i += ['-C', '-c', '--namespace', '--config-env'].includes(a) ? 2 : 1;
     }
     const sub = args[i];
     const rest = args.slice(i + 1);

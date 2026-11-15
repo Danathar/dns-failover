@@ -63,6 +63,8 @@ const allowed = [
     'git diff --stat origin/main...HEAD',
     'git diff --no-ext-diff HEAD~1',
     'git show HEAD:dns-upstream-check.py',
+    // a --bare after the subcommand is not git's global option
+    'git log --oneline -- --bare',
     // A pattern is protected only when it can match a protected name, whole:
     // `check*.py` cannot be dns-upstream-check.py, and an unclosed `[` is a literal.
     'python3 scripts/check*.py',
@@ -259,6 +261,17 @@ const blocked = [
     ['GIT_PAGER=./x.sh git log', 'GIT_PAGER'],
     ['GIT_TRACE=monitor.py git status', 'GIT_TRACE'],
     ['GIT_DIR=/tmp/other/.git git log', 'GIT_DIR'],
+    // the option spellings of GIT_DIR / GIT_WORK_TREE: a named bare repository
+    // gets past safe.bareRepository=explicit, so its textconv program would run
+    ['git --git-dir=evil log -p -1', '--git-dir'],
+    ['git --git-dir evil show', '--git-dir'],
+    ['git --bare show', '--bare'],
+    ['git --bare log -p -1', '--bare'],
+    ['git --work-tree=/etc diff', '--work-tree'],
+    ['git --work-tree /etc status', '--work-tree'],
+    ['git --no-pager --git-dir=evil show', '--git-dir'],
+    ['git -c user.name=x --git-dir=evil log -p', '--git-dir'],
+    ['cd tests && git --git-dir=../evil show', '--git-dir'],
     ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.external GIT_CONFIG_VALUE_0=./x.sh git diff', 'GIT_CONFIG_COUNT'],
     ['gh pr create', 'no --repo'],
     ['gh pr create --title t --body b', 'no --repo'],
