@@ -217,6 +217,13 @@
             "original": "!job",
             "replacement": "false",
             "reason": "Equivalent in checkJobTimeouts: the guard cannot be true. jobIndent is set from the first non-blank line under jobs:, which therefore equals jobIndent and creates the job before any later line is read, so job is never null there. It stays as a guard against a null dereference if the loop is changed."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "configKey !== null",
+            "replacement": "true",
+            "reason": "Equivalent in the safe.* refusal: configKey is null only when the option is neither `-c` nor `--config-env`, and then `/^safe\\./i.test(null)` tests the text \"null\", which never starts with `safe.`, so the refusal is the same either way."
         }
     ]
 }
