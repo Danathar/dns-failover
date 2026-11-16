@@ -203,6 +203,20 @@
             "original": "/^--(?:git-dir|work-tree)=/",
             "replacement": "/--(?:git-dir|work-tree)=/",
             "reason": "Harmless over-refusal: the test runs only on a global option, which already starts with `-`. Without the anchor it also refuses an option such as `-c--git-dir=x` that merely contains `--git-dir=` or `--work-tree=`, so the guard refuses more, never less."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "Regex",
+            "original": "/\\s*:.*$/",
+            "replacement": "/\\s*:.*/",
+            "reason": "Equivalent in checkJobTimeouts: `.*` is greedy and a workflow line holds no line break (the text is split on newlines), so it already runs to the end of the line and the `$` anchor changes no match. The result only feeds the job name in the message."
+        },
+        {
+            "file": "scripts/check-policies.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "!job",
+            "replacement": "false",
+            "reason": "Equivalent in checkJobTimeouts: the guard cannot be true. jobIndent is set from the first non-blank line under jobs:, which therefore equals jobIndent and creates the job before any later line is read, so job is never null there. It stays as a guard against a null dereference if the loop is changed."
         }
     ]
 }

@@ -281,6 +281,61 @@ on:
     assert.deepEqual(checkJobTimeouts('w.yml', ['name: x', 'on: push']), []);
 });
 
+const noTimeout = (f, line, name) =>
+    `${f}:${line}: job "${name}" has no timeout-minutes (GitHub's default is 360 minutes)`;
+
+test('job timeouts: only a top-level jobs: key starts the scan', () => {
+    const job = ['  a:', '    runs-on: ubuntu-latest'];
+    // "jobs:" inside another line is not the jobs key
+    assert.deepEqual(checkJobTimeouts('w.yml', ['env:', '  x: jobs:', 'jobs:', ...job]), [
+        noTimeout('w.yml', 4, 'a'),
+    ]);
+    // YAML allows a space before the colon
+    assert.deepEqual(checkJobTimeouts('w.yml', ['jobs :', ...job]), [noTimeout('w.yml', 2, 'a')]);
+    // jobs: on the second line is still found
+    assert.deepEqual(checkJobTimeouts('w.yml', ['name: x', 'jobs:', ...job]), [
+        noTimeout('w.yml', 3, 'a'),
+    ]);
+    // without a jobs: key nothing is checked, even indented keys that look like jobs
+    assert.deepEqual(checkJobTimeouts('w.yml', job), []);
+});
+
+test('job timeouts: a blank line between jobs does not end the scan', () => {
+    const code = [
+        'jobs:',
+        '  a:',
+        '    timeout-minutes: 5',
+        '',
+        '  b:',
+        '    runs-on: ubuntu-latest',
+    ];
+    assert.deepEqual(checkJobTimeouts('w.yml', code), [noTimeout('w.yml', 5, 'b')]);
+});
+
+test('job timeouts: only the exact timeout-minutes and uses keys count', () => {
+    const code = `jobs:
+  a:
+    runs-on: ubuntu-latest
+    x-timeout-minutes: 5
+  b:
+    timeout-minutesX: 5
+  c:
+    timeout-minutes : 5
+  d:
+    x-uses: ./.github/workflows/reusable.yml
+  e:
+    usesX: ./.github/workflows/reusable.yml
+  f:
+    uses : ./.github/workflows/reusable.yml
+`.split('\n');
+    assert.deepEqual(checkJobTimeouts('w.yml', code), [
+        noTimeout('w.yml', 2, 'a'),
+        noTimeout('w.yml', 5, 'b'),
+        noTimeout('w.yml', 9, 'd'),
+        noTimeout('w.yml', 11, 'e'),
+    ]);
+});
+
 test('workflows: missing top-level permissions fails', () => {
     const wf = GOOD_WF.replace('permissions:\n  contents: read\n', '');
     const v = run({ '.github/workflows/a.yml': wf });
