@@ -10,6 +10,7 @@ import {
     checkCodeowners,
     checkRiskTiers,
     checkTempPaths,
+    checkJobTimeouts,
     checkWorkflows,
     classify,
     codeownersPattern,
@@ -104,6 +105,7 @@ permissions:
 jobs:
   a:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
 `;
@@ -233,6 +235,50 @@ test('repo-target: markdown outside the scanned dirs is not scanned', () => {
 
 test('workflows: compliant workflow passes', () => {
     assert.deepEqual(run({ '.github/workflows/a.yml': GOOD_WF }), []);
+});
+
+const WITH_TIMEOUT_RULE = JSON.stringify({ ...JSON.parse(WORKFLOWS), requireJobTimeout: true });
+
+test('workflows: job timeouts are not required while requireJobTimeout is off', () => {
+    const wf = GOOD_WF.replace('    timeout-minutes: 5\n', '');
+    const policy = JSON.stringify({ ...JSON.parse(WORKFLOWS), requireJobTimeout: false });
+    assert.deepEqual(
+        run({ '.github/workflows/a.yml': wf, 'policies/workflow-permissions.json': policy }),
+        [],
+    );
+});
+
+test('workflows: with requireJobTimeout, a job without timeout-minutes fails, with line number', () => {
+    const policy = { 'policies/workflow-permissions.json': WITH_TIMEOUT_RULE };
+    assert.deepEqual(run({ '.github/workflows/a.yml': GOOD_WF, ...policy }), []);
+    const wf = GOOD_WF.replace('    timeout-minutes: 5\n', '');
+    const v = run({ '.github/workflows/a.yml': wf, ...policy });
+    assert.equal(v.length, 1);
+    assert.match(v[0], /a\.yml:7: job "a" has no timeout-minutes/);
+});
+
+test('job timeouts: each job is judged on its own direct keys', () => {
+    const code = `jobs:
+  first:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - run: echo
+  second:
+    runs-on: ubuntu-latest
+    steps:
+      - name: a step timeout is not a job timeout
+        timeout-minutes: 3
+        run: echo
+  call:
+    uses: ./.github/workflows/reusable.yml
+on:
+  push:
+`.split('\n');
+    assert.deepEqual(checkJobTimeouts('w.yml', code), [
+        'w.yml:7: job "second" has no timeout-minutes (GitHub\'s default is 360 minutes)',
+    ]);
+    assert.deepEqual(checkJobTimeouts('w.yml', ['name: x', 'on: push']), []);
 });
 
 test('workflows: missing top-level permissions fails', () => {
@@ -515,12 +561,12 @@ test('workflows: event expressions in run scripts are rejected, env use is not',
     const inline = GOOD_WF + '      - run: echo "${{ github.event.issue.title }}"\n';
     const v = run({ '.github/workflows/a.yml': inline });
     assert.equal(v.length, 1);
-    assert.match(v[0], /a\.yml:11:.*github\.event\.issue\.title.*env:/);
+    assert.match(v[0], /a\.yml:12:.*github\.event\.issue\.title.*env:/);
 
     const block = GOOD_WF + '      - name: n\n        run: |\n          echo ok\n          echo "${{ github.head_ref }}"\n';
     const vb = run({ '.github/workflows/a.yml': block });
     assert.equal(vb.length, 1);
-    assert.match(vb[0], /a\.yml:14:/);
+    assert.match(vb[0], /a\.yml:15:/);
 
     const viaEnv =
         GOOD_WF +
