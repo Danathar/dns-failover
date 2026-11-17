@@ -591,6 +591,45 @@ export function checkRunExpressions(f, code, policy) {
     return v;
 }
 
+/**
+ * Every job under `jobs:` sets `timeout-minutes:`, so a hung job stops long
+ * before GitHub's 360-minute default. A job that calls a reusable workflow
+ * (`uses:` as a job key) is skipped: GitHub does not accept a timeout there.
+ */
+export function checkJobTimeouts(f, code) {
+    const at = code.findIndex((l) => /^jobs\s*:/.test(l));
+    if (at === -1) return [];
+    const v = [];
+    let jobIndent = -1;
+    let job = null;
+    const finish = () => {
+        if (job && !job.timeout && !job.reusable) {
+            v.push(
+                `${f}:${job.line}: job "${job.name}" has no timeout-minutes (GitHub's default is 360 minutes)`,
+            );
+        }
+    };
+    for (let i = at + 1; i < code.length; i++) {
+        const l = code[i];
+        if (isBlank(l)) continue;
+        const indent = indentOf(l);
+        if (indent === 0) break;
+        if (jobIndent === -1) jobIndent = indent;
+        if (indent === jobIndent) {
+            finish();
+            job = { name: l.trim().replace(/\s*:.*$/, ''), line: i + 1, childIndent: -1 };
+            continue;
+        }
+        if (!job) continue;
+        if (job.childIndent === -1) job.childIndent = indent;
+        if (indent !== job.childIndent) continue;
+        if (/^\s*timeout-minutes\s*:/.test(l)) job.timeout = true;
+        if (/^\s*uses\s*:/.test(l)) job.reusable = true;
+    }
+    finish();
+    return v;
+}
+
 export function checkWorkflows(root, policy, files) {
     const v = [];
     const pin = new RegExp(policy.pinPattern);
@@ -627,6 +666,7 @@ export function checkWorkflows(root, policy, files) {
             }
         });
 
+        if (policy.requireJobTimeout) v.push(...checkJobTimeouts(f, code));
         if (policy.ghWriteNeedsRepo) v.push(...checkGhScope(f, code, policy));
         if (policy.forbiddenRunExpressions) {
             v.push(...checkRunExpressions(f, lines, policy));
