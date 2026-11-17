@@ -433,21 +433,24 @@ test('workflows: GH_REPO or --repo pointing at upstream is rejected', () => {
 test('workflows: GH_REPO in another job or step does not scope a write', () => {
     const otherJob = wfWith(`  a:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       GH_REPO: \${{ github.repository }}
     steps:
       - run: gh pr view 1
   b:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - run: gh pr close 1
 `);
     const v = run({ '.github/workflows/a.yml': otherJob });
     assert.equal(v.length, 1);
-    assert.match(v[0], /a\.yml:16: "gh pr close" has no --repo/);
+    assert.match(v[0], /a\.yml:18: "gh pr close" has no --repo/);
 
     const otherStep = wfWith(`  a:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: scoped
         env:
@@ -459,12 +462,13 @@ test('workflows: GH_REPO in another job or step does not scope a write', () => {
 `);
     const v2 = run({ '.github/workflows/a.yml': otherStep });
     assert.equal(v2.length, 1);
-    assert.match(v2[0], /a\.yml:16: "gh pr close" has no --repo/);
+    assert.match(v2[0], /a\.yml:17: "gh pr close" has no --repo/);
 });
 
 test('workflows: step, job and workflow GH_REPO each scope their writes', () => {
     const ok = wfWith(`  a:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       GH_REPO: Danathar/dns-failover
     steps:
@@ -475,6 +479,7 @@ test('workflows: step, job and workflow GH_REPO each scope their writes', () => 
           gh pr merge 2 --repo "$GH_REPO"
   b:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: s
         env:
@@ -535,6 +540,7 @@ test('workflows: command-local GH_REPO overrides are checked', () => {
     const scopedJob = (cmd) =>
         wfWith(`  a:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       GH_REPO: \${{ github.repository }}
     steps:
@@ -557,6 +563,7 @@ test('workflows: command-local GH_REPO overrides are checked', () => {
     const v = run({
         '.github/workflows/a.yml': wfWith(`  a:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - run: GH_REPO=Danathar/dns-failover gh pr close 1; gh pr close 2
 `),
