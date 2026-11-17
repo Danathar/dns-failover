@@ -149,3 +149,36 @@ test('a command-line safe.bareRepository override still runs the program, so the
         assert.match(r.stderr, /safe\.bareRepository/);
     }
 });
+
+// The protection lasts only while the GIT_CONFIG_* settings env is set. A
+// command that removes it (`unset`, `env -u`) or clears the whole environment
+// before git (`env -i`, a lone `-`) puts safe.bareRepository back on its
+// default, and the planted program runs again. The guard hook refuses them.
+test('removing the GIT_CONFIG_* settings env still runs the program, so the guard hook refuses it', (t) => {
+    const dir = mkdtempSync(join(tmpdir(), 'bare-repo-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const marker = join(dir, 'ran');
+    const victim = plantedClone(dir, marker);
+    const agentEnv = { ...baseEnv(dir), ...settingsEnv };
+    const hook = fileURLToPath(new URL('../../.claude/hooks/guard-bash.mjs', import.meta.url));
+
+    for (const command of [
+        'env -u GIT_CONFIG_COUNT git -C evil log -p -1',
+        'env --unset=GIT_CONFIG_COUNT git -C evil show',
+        'unset GIT_CONFIG_COUNT; git -C evil log -p -1',
+        'env -i git -C evil log -p -1',
+        'env - git -C evil show',
+    ]) {
+        // Run as the agent's shell would, with the settings env in place.
+        spawnSync('sh', ['-c', command], { cwd: victim, env: agentEnv, encoding: 'utf8' });
+        assert.ok(existsSync(marker), `${command} no longer runs the program; this test needs a new route`);
+        rmSync(marker);
+
+        const r = spawnSync(process.execPath, [hook], {
+            input: JSON.stringify({ tool_name: 'Bash', tool_input: { command } }),
+            encoding: 'utf8',
+        });
+        assert.equal(r.status, 2, `the guard hook should refuse ${command}: ${r.stderr}`);
+        assert.match(r.stderr, /GIT_CONFIG_\* settings env/);
+    }
+});

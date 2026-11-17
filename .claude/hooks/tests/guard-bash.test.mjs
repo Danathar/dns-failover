@@ -67,6 +67,19 @@ const allowed = [
     'git log --oneline -- --bare',
     // only a key in the safe.* section is refused, not one that merely contains it
     'git -c branch.unsafe.merge=x status',
+    // Removing a variable other than GIT_CONFIG_* (the settings env) is fine,
+    // and so is clearing the environment for a command that is not git.
+    'unset FOO; git log -1',
+    'unset NOT_GIT_CONFIG_COUNT; git log -1',
+    'env -u FOO git log -1',
+    'env -u NOT_GIT_CONFIG_COUNT git log -1',
+    'env LANG=C git log -1',
+    // -a's value is the $0 name and -u's value is one word, not env's -i.
+    'env -a GIT_CONFIG_COUNT git status',
+    'env -u -i git status',
+    'env -i python3 -m pytest',
+    // only `unset` removes a variable; a word naming one elsewhere is data
+    'git grep -n GIT_CONFIG_COUNT',
     // A pattern is protected only when it can match a protected name, whole:
     // `check*.py` cannot be dns-upstream-check.py, and an unclosed `[` is a literal.
     'python3 scripts/check*.py',
@@ -205,10 +218,10 @@ const allowed = [
     // A wrapper option's value is not the command it runs.
     'env -a git git status',
     'exec -a git git status',
-    'env - git status',
+    'env - gh pr list',
     // Packed and abbreviated wrapper options still reach the command they wrap.
     'timeout -vk 5 10 git status',
-    'env -iu X git status',
+    'env -iu X gh pr list',
     'env -a X git status',
     // -a's value is the $0 name, not an env -S command string.
     "env -a '-Sgit push --force' git status",
@@ -274,6 +287,36 @@ const blocked = [
     ['cd evil && git -c safe.bareRepository=all show', 'safe.bareRepository'],
     ['git -c user.name=x -c safe.bareRepository=all show', 'safe.bareRepository'],
     ['git -c safe.bareRepository=all log -p', 'Run git without it'],
+    // Removing the GIT_CONFIG_* settings env (unset, env -u) or clearing the
+    // whole environment before git (env -i, --ignore-environment, a lone `-`)
+    // puts safe.bareRepository back on its default, so a discovered bare
+    // repository's textconv would run again
+    ['env -u GIT_CONFIG_COUNT git -C evil log -p -1', 'env -u GIT_CONFIG_COUNT'],
+    ['env --unset GIT_CONFIG_KEY_0 git show', 'env -u GIT_CONFIG_KEY_0'],
+    ['env --unset=GIT_CONFIG_COUNT git log -p', 'env -u GIT_CONFIG_COUNT'],
+    ['env -uGIT_CONFIG_VALUE_0 git show', 'env -u GIT_CONFIG_VALUE_0'],
+    ['env --uns GIT_CONFIG_COUNT git show', 'env -u GIT_CONFIG_COUNT'],
+    ['env -u FOO -u GIT_CONFIG_COUNT git show', 'env -u GIT_CONFIG_COUNT'],
+    ['env -iu GIT_CONFIG_COUNT python3 -m pytest', 'env -u GIT_CONFIG_COUNT'],
+    ['timeout 5 env -u GIT_CONFIG_COUNT git show', 'env -u GIT_CONFIG_COUNT'],
+    ['env -u GIT_CONFIG_COUNT git show', 'Leave it set'],
+    ['unset GIT_CONFIG_COUNT; git -C evil log -p -1', 'unset GIT_CONFIG_COUNT'],
+    ['unset GIT_CONFIG_COUNT', 'unset GIT_CONFIG_COUNT'],
+    ['unset -v GIT_CONFIG_KEY_0 && git show', 'unset GIT_CONFIG_KEY_0'],
+    ['unset FOO GIT_CONFIG_VALUE_0; git show', 'unset GIT_CONFIG_VALUE_0'],
+    ['builtin unset GIT_CONFIG_COUNT; git show', 'unset GIT_CONFIG_COUNT'],
+    ["bash -c 'unset GIT_CONFIG_COUNT; git show'", 'unset GIT_CONFIG_COUNT'],
+    ["eval 'unset GIT_CONFIG_COUNT'; git show", 'unset GIT_CONFIG_COUNT'],
+    ['env -i git -C evil log -p -1', 'env -i'],
+    ['env --ignore-environment git show', 'env -i'],
+    ['env --ignore-e git show', 'env -i'],
+    ['env - git status', 'env -i'],
+    ['env -iu X git status', 'env -i'],
+    ['env -i PATH=/usr/bin git log -p', 'env -i'],
+    ['env -i timeout 5 git show', 'env -i'],
+    ["env -i bash -c 'git show'", 'env -i'],
+    ["env -iS'git show'", 'env -i'],
+    ['env -i git show', 'Run git without clearing the environment'],
     // the option spellings of GIT_DIR / GIT_WORK_TREE: a named bare repository
     // gets past safe.bareRepository=explicit, so its textconv program would run
     ['git --git-dir=evil log -p -1', '--git-dir'],
