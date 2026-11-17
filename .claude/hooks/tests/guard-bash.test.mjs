@@ -70,9 +70,9 @@ const allowed = [
     // Removing a variable other than GIT_CONFIG_* (the settings env) is fine,
     // and so is clearing the environment for a command that is not git.
     'unset FOO; git log -1',
-    'unset NOT_GIT_CONFIG_COUNT; git log -1',
+    'unset -v FOO; git log -1',
     'env -u FOO git log -1',
-    'env -u NOT_GIT_CONFIG_COUNT git log -1',
+    'env -u',
     'env LANG=C git log -1',
     // -a's value is the $0 name and -u's value is one word, not env's -i.
     'env -a GIT_CONFIG_COUNT git status',
@@ -223,6 +223,15 @@ const allowed = [
     'timeout -vk 5 10 git status',
     'env -iu X gh pr list',
     'exec -c python3 -m pytest',
+    // exec's own options end at its first non-option word or `--`, -a takes a
+    // value, and only -c clears the environment: git's own -c, exec -l, the
+    // value of -a and a bare `exec -c` leave git with the settings env.
+    'exec git -c user.name=x status',
+    'exec -l git status',
+    'exec -a -c git status',
+    'exec -c',
+    // another wrapper's -c (ionice's class) is not exec's -c
+    'ionice -c 3 git status',
     // an option value that merely looks like a GIT_CONFIG_* name unsets nothing
     'env --argv0=GIT_CONFIG_COUNT git status',
     'env -a X git status',
@@ -310,6 +319,23 @@ const blocked = [
     ['builtin unset GIT_CONFIG_COUNT; git show', 'unset GIT_CONFIG_COUNT'],
     ["bash -c 'unset GIT_CONFIG_COUNT; git show'", 'unset GIT_CONFIG_COUNT'],
     ["eval 'unset GIT_CONFIG_COUNT'; git show", 'unset GIT_CONFIG_COUNT'],
+    // a name that contains GIT_CONFIG anywhere, and any word bash rewrites
+    // before unset or env sees it: ${!GIT_CONFIG@} / ${!GIT_CONFIG*} expand to
+    // every set GIT_CONFIG_* name, $v to the name it holds, braces and globs
+    // to names the hook cannot see
+    ['unset NOT_GIT_CONFIG_COUNT; git log -1', 'unset NOT_GIT_CONFIG_COUNT'],
+    ['env -u NOT_GIT_CONFIG_COUNT git log -1', 'env -u NOT_GIT_CONFIG_COUNT'],
+    ['unset ${!GIT_CONFIG@}; git -C evil log -p -1', 'can remove the GIT_CONFIG_'],
+    ['unset ${!GIT_CONFIG*}; git show', 'can remove the GIT_CONFIG_'],
+    ['unset -v ${!GIT_CONFIG@}', 'can remove the GIT_CONFIG_'],
+    ["bash -c 'unset ${!GIT_CONFIG@}; git show'", 'can remove the GIT_CONFIG_'],
+    ['v=GIT_CONFIG_COUNT; unset $v; git -C evil log -p -1', 'can remove the GIT_CONFIG_'],
+    ['unset "$v"; git show', 'can remove the GIT_CONFIG_'],
+    ['unset FOO $v; git show', 'can remove the GIT_CONFIG_'],
+    ['unset GIT_{CONFIG_COUNT,X}; git show', 'can remove the GIT_CONFIG_'],
+    ['unset GIT_CONF*; git show', 'can remove the GIT_CONFIG_'],
+    ['env -u $v git show', 'can remove the GIT_CONFIG_'],
+    ['env --unset=${v} git show', 'can remove the GIT_CONFIG_'],
     ['env -i git -C evil log -p -1', 'env -i'],
     ['env --ignore-environment git show', 'env -i'],
     ['env --ignore-e git show', 'env -i'],

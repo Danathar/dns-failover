@@ -151,9 +151,10 @@ test('a command-line safe.bareRepository override still runs the program, so the
 });
 
 // The protection lasts only while the GIT_CONFIG_* settings env is set. A
-// command that removes it (`unset`, `env -u`) or clears the whole environment
-// before git (`env -i`, a lone `-`) puts safe.bareRepository back on its
-// default, and the planted program runs again. The guard hook refuses them.
+// command that removes it (`unset`, also as `unset ${!GIT_CONFIG@}` or
+// `unset $v`, `env -u`) or clears the whole environment before git (`env -i`,
+// a lone `-`) puts safe.bareRepository back on its default, and the planted
+// program runs again. The guard hook refuses them.
 test('removing the GIT_CONFIG_* settings env still runs the program, so the guard hook refuses it', (t) => {
     const dir = mkdtempSync(join(tmpdir(), 'bare-repo-'));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -166,6 +167,9 @@ test('removing the GIT_CONFIG_* settings env still runs the program, so the guar
         'env -u GIT_CONFIG_COUNT git -C evil log -p -1',
         'env --unset=GIT_CONFIG_COUNT git -C evil show',
         'unset GIT_CONFIG_COUNT; git -C evil log -p -1',
+        // ${!GIT_CONFIG@} expands to every set GIT_CONFIG_* name; $v to the name it holds
+        'unset ${!GIT_CONFIG@}; git -C evil log -p -1',
+        'v=GIT_CONFIG_COUNT; unset $v; git -C evil log -p -1',
         'env -i git -C evil log -p -1',
         'env - git -C evil show',
         'exec -c git -C evil log -p -1',
