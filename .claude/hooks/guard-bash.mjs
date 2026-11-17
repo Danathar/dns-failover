@@ -1748,6 +1748,14 @@ function checkSegment(words, state) {
                 return checkSegment([...head, ...w.slice(rest)], state);
             }
         }
+        // bash's `exec -c` clears the environment just as `env -i` does. The
+        // options are already one letter each (`exec -cl` is `-c -l`).
+        if (cmd === 'exec') {
+            for (let k = 1; k < w.length && w[k].startsWith('-') && w[k] !== '--'; k++) {
+                if (w[k] === '-a') k++;
+                else if (w[k] === '-c') state = Object.assign(Object.create(state), { envCleared: true });
+            }
+        }
         // Look through the wrapper to the command it runs: skip its own options
         // (and their values), NAME=value words, and operands such as timeout's duration.
         const idx = wrapperTarget(w);
@@ -1834,7 +1842,7 @@ function checkSegment(words, state) {
         const refusal = checkGit(args, inlineEnv, state.exportedEnv ?? {});
         if (refusal || !state.envCleared) return refusal;
         return block(
-            'Blocked: `env -i` (`--ignore-environment`, a lone `-`) runs git without the GIT_CONFIG_* settings env in ' +
+            'Blocked: `env -i` (`--ignore-environment`, a lone `-`) and `exec -c` run git without the GIT_CONFIG_* settings env in ' +
                 '.claude/settings.json that stops a committed repository folder from running a program. ' +
                 'Run git without clearing the environment.'
         );

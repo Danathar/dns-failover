@@ -222,6 +222,9 @@ const allowed = [
     // Packed and abbreviated wrapper options still reach the command they wrap.
     'timeout -vk 5 10 git status',
     'env -iu X gh pr list',
+    'exec -c python3 -m pytest',
+    // an option value that merely looks like a GIT_CONFIG_* name unsets nothing
+    'env --argv0=GIT_CONFIG_COUNT git status',
     'env -a X git status',
     // -a's value is the $0 name, not an env -S command string.
     "env -a '-Sgit push --force' git status",
@@ -317,6 +320,13 @@ const blocked = [
     ["env -i bash -c 'git show'", 'env -i'],
     ["env -iS'git show'", 'env -i'],
     ['env -i git show', 'Run git without clearing the environment'],
+    ['env -i git show', 'that stops a committed repository folder from running a program'],
+    // bash's exec -c clears the environment the same way env -i does
+    ['exec -c git -C evil log -p -1', 'exec -c'],
+    ['exec -cl git show', 'exec -c'],
+    ['exec -c -a x git show', 'exec -c'],
+    ['exec -c -- git show', 'exec -c'],
+    ["exec -c bash -c 'git show'", 'exec -c'],
     // the option spellings of GIT_DIR / GIT_WORK_TREE: a named bare repository
     // gets past safe.bareRepository=explicit, so its textconv program would run
     ['git --git-dir=evil log -p -1', '--git-dir'],

@@ -168,9 +168,10 @@ test('removing the GIT_CONFIG_* settings env still runs the program, so the guar
         'unset GIT_CONFIG_COUNT; git -C evil log -p -1',
         'env -i git -C evil log -p -1',
         'env - git -C evil show',
+        'exec -c git -C evil log -p -1',
     ]) {
-        // Run as the agent's shell would, with the settings env in place.
-        spawnSync('sh', ['-c', command], { cwd: victim, env: agentEnv, encoding: 'utf8' });
+        // Run as the agent's shell would (bash, whose exec has -c), with the settings env in place.
+        spawnSync('bash', ['-c', command], { cwd: victim, env: agentEnv, encoding: 'utf8' });
         assert.ok(existsSync(marker), `${command} no longer runs the program; this test needs a new route`);
         rmSync(marker);
 
