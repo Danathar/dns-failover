@@ -5,6 +5,7 @@
         ".github/workflows/*.yaml"
     ],
     "requireTopLevelPermissions": true,
+    "requireJobTimeout": true,
     "forbiddenTriggers": [
         "pull_request_target"
     ],
