@@ -27,6 +27,7 @@ jobs:
   agent-tooling:
     name: agent-tooling
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

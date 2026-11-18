@@ -191,6 +191,9 @@ Enforced by [policies/workflow-permissions.json](../../policies/workflow-permiss
 
 - Every workflow declares a top-level `permissions:` block that grants no write
   scope. Wider scopes are granted per job, for the job that needs them.
+- Every job sets `timeout-minutes:`, so a hung job stops long before GitHub's
+  360-minute default. A job that calls a reusable workflow is exempt, because
+  GitHub does not accept a timeout there.
 - `pull_request_target` is not used: it runs with write tokens and secrets on
   code a fork author controls.
 - Actions outside `actions/` and `github/` are pinned to a full commit SHA,
