@@ -99,7 +99,7 @@ def test_launch_probes_every_upstream_under_its_certificate_name(monkeypatch, ca
     # both Cloudflare Families addresses on port 853, verify each certificate
     # against the right name, and print one line per (upstream, name) in order.
     # test_entry_points covers only the bad-input exits.
-    controld = "exampleprofile.dns.controld.com"
+    controld = "example.dns.controld.com"
     cloudflare = "family.cloudflare-dns.com"
     upstreams = [("76.76.2.22", controld), ("76.76.10.22", controld),
                  ("1.1.1.3", cloudflare), ("1.0.0.3", cloudflare)]
@@ -118,7 +118,7 @@ def test_launch_probes_every_upstream_under_its_certificate_name(monkeypatch, ca
 
     monkeypatch.setattr(socket, "create_connection", lambda addr, timeout: Raw(addr))
     monkeypatch.setattr(ssl, "create_default_context", Ctx)
-    monkeypatch.setattr(sys, "argv", ["dns-upstream-probe.py", "--controld-profile", "exampleprofile"])
+    monkeypatch.setattr(sys, "argv", ["dns-upstream-probe.py", "--controld-profile", "example"])
     runpy.run_path(str(ROOT / "dns-upstream-probe.py"), run_name="__main__")
 
     assert sorted(seen) == sorted(((ip, 853), host) for ip, host in upstreams for _ in names)
