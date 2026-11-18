@@ -1,7 +1,14 @@
 """Offline tests for dns-upstream-probe.py: the DoT exchange is replaced by a fake socket stack."""
+import runpy
+import socket
+import ssl
 import struct
+import sys
+from pathlib import Path
 
 import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class FakeConn:
@@ -85,3 +92,36 @@ def test_recv_exact_assembles_short_reads(probe):
             return chunk
 
     assert probe.recv_exact(Slow(), 6) == b"abcdef"
+
+
+def test_launch_probes_every_upstream_under_its_certificate_name(monkeypatch, capsys):
+    # The program run by hand: a valid profile must reach both ControlD and
+    # both Cloudflare Families addresses on port 853, verify each certificate
+    # against the right name, and print one line per (upstream, name) in order.
+    # test_entry_points covers only the bad-input exits.
+    controld = "exampleprofile.dns.controld.com"
+    cloudflare = "family.cloudflare-dns.com"
+    upstreams = [("76.76.2.22", controld), ("76.76.10.22", controld),
+                 ("1.1.1.3", cloudflare), ("1.0.0.3", cloudflare)]
+    names = ("example.com", "cloudflare.com")
+    seen = []
+
+    class Raw(FakeConn):
+        def __init__(self, addr):
+            super().__init__(b"")
+            self.addr = addr
+
+    class Ctx:
+        def wrap_socket(self, raw, server_hostname):
+            seen.append((raw.addr, server_hostname))
+            return FakeConn(reply())
+
+    monkeypatch.setattr(socket, "create_connection", lambda addr, timeout: Raw(addr))
+    monkeypatch.setattr(ssl, "create_default_context", Ctx)
+    monkeypatch.setattr(sys, "argv", ["dns-upstream-probe.py", "--controld-profile", "exampleprofile"])
+    runpy.run_path(str(ROOT / "dns-upstream-probe.py"), run_name="__main__")
+
+    assert sorted(seen) == sorted(((ip, 853), host) for ip, host in upstreams for _ in names)
+    lines = capsys.readouterr().out.splitlines()
+    assert [line.split(":")[0] for line in lines] == [f"{ip} {name}" for ip, _ in upstreams for name in names]
+    assert all(line.endswith("TLS verified") and ": NOERROR, answers=1, " in line for line in lines), lines
