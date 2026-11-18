@@ -109,6 +109,24 @@ const allowed = [
     // a bare `declare NAME` changes neither the value nor the export, and
     // `+x` inside an operand's value is not declare's +x option
     'declare v=a+x GIT_CONFIG_COUNT; git status',
+    // a word that only contains GIT_CONFIG after a non-word character, or in
+    // an assignment's value, is not a subscripted GIT_CONFIG_* assignment
+    'x.GIT_CONFIG_COUNT[1]=2',
+    'FOO=GIT_CONFIG_X[1]=2',
+    // printf -v, read, mapfile, for, select and let setting another name
+    'printf -v FOO %s 1; git log -1',
+    'printf -vFOO %s 1; git log -1',
+    "printf '%s\\n' GIT_CONFIG_COUNT",
+    'printf',
+    'read x <<< 1; git log -1',
+    'read -r a b <<< 1',
+    'mapfile -t lines < /dev/null; git log -1',
+    'readarray lines < /dev/null',
+    'for i in 1 2; do echo $i; done',
+    'for ((;;)); do break; done',
+    'select x in a b; do break; done <<< 1',
+    'let i=1+2; git log -1',
+    'echo GIT_CONFIG_COUNT',
     // A pattern is protected only when it can match a protected name, whole:
     // `check*.py` cannot be dns-upstream-check.py, and an unclosed `[` is a literal.
     'python3 scripts/check*.py',
@@ -419,6 +437,30 @@ const blocked = [
     ['typeset +x GIT_CONFIG_KEY_0; git show', 'GIT_CONFIG_KEY_0 set'],
     ['declare +gx GIT_CONFIG_COUNT; git -C evil log -p -1', 'GIT_CONFIG_COUNT set'],
     ['typeset +gx GIT_CONFIG_KEY_0; git show', 'GIT_CONFIG_KEY_0 set'],
+    ['GIT_CONFIG_COUNT=0; git show', 'the variable stays exported, so git reads the new value'],
+    // a subscript longer than one character, and a name with a prefix
+    ['GIT_CONFIG_COUNT[10]=0; git show', 'GIT_CONFIG_COUNT[10]=0'],
+    ['NOT_GIT_CONFIG_COUNT[0]=0; git show', 'NOT_GIT_CONFIG_COUNT[0]=0'],
+    ['GIT_CONFIG_VALUE_0[10]+=all; git show', 'GIT_CONFIG_VALUE_0[10]+=all'],
+    // other builtins that set a variable as a statement
+    ['printf -v GIT_CONFIG_COUNT %s 0; git -C evil log -p -1', 'printf -v GIT_CONFIG_COUNT'],
+    ['printf -v GIT_CONFIG_VALUE_0 %s all; git show', 'printf -v GIT_CONFIG_VALUE_0'],
+    ['printf -vGIT_CONFIG_COUNT %s 0; git show', 'printf -v GIT_CONFIG_COUNT'],
+    ['printf -v $v %s 0; git show', 'printf -v $v'],
+    ['printf -v', '`printf -v ` overwrites the GIT_CONFIG_'],
+    ['read GIT_CONFIG_COUNT <<< 0; git -C evil log -p -1', 'read GIT_CONFIG_COUNT'],
+    ['read -r FOO GIT_CONFIG_VALUE_0 <<< 0; git show', 'read GIT_CONFIG_VALUE_0'],
+    ['read -a GIT_CONFIG_COUNT <<< 0; git show', 'read GIT_CONFIG_COUNT'],
+    ['read $v <<< 0; git show', 'read $v'],
+    ['mapfile GIT_CONFIG_COUNT < /dev/null; git -C evil log -p -1', 'mapfile GIT_CONFIG_COUNT'],
+    ['readarray -t GIT_CONFIG_VALUE_0 < /dev/null; git show', 'readarray GIT_CONFIG_VALUE_0'],
+    ['for GIT_CONFIG_COUNT in 0; do git -C evil log -p -1; done', 'for GIT_CONFIG_COUNT'],
+    ['for $v in 0; do git show; done', 'for $v'],
+    ['select GIT_CONFIG_COUNT in 0; do git show; break; done <<< 1', 'select GIT_CONFIG_COUNT'],
+    ['let GIT_CONFIG_COUNT=0; git -C evil log -p -1', 'let GIT_CONFIG_COUNT=0'],
+    ['let x=GIT_CONFIG_VALUE_0=1; git show', 'let x=GIT_CONFIG_VALUE_0=1'],
+    ['let $v=0; git show', 'let $v=0'],
+    ["bash -c 'printf -v GIT_CONFIG_COUNT %s 0; git show'", 'printf -v GIT_CONFIG_COUNT'],
     // the option spellings of GIT_DIR / GIT_WORK_TREE: a named bare repository
     // gets past safe.bareRepository=explicit, so its textconv program would run
     ['git --git-dir=evil log -p -1', '--git-dir'],

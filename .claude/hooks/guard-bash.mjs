@@ -1895,6 +1895,29 @@ function checkSegment(words, state) {
         const name = args.find(removesSettingsEnv);
         if (name !== undefined) return blockSettingsEnvRemoval(`unset ${name}`);
     }
+    // Other builtins set a variable as a statement too, and an exported one
+    // keeps its export: `printf -v NAME`, `read NAME`, `mapfile NAME` /
+    // `readarray NAME`, the loop variable of `for NAME in` / `select NAME in`,
+    // and `let NAME=` (an arithmetic assignment). The name is refused as for
+    // unset; a `printf -v` with no name is refused too. Every operand of read
+    // and mapfile is read as a name, so an option value that is not a plain
+    // word (`read -p 'Name: ' x`) is refused as well. A `let` expression is
+    // refused when it contains GIT_CONFIG or a `$` (`let $v=0`).
+    if (cmd === 'printf' && args.length && args[0].startsWith('-v')) {
+        const name = args[0] === '-v' ? args[1] : args[0].slice(2);
+        if (name === undefined || removesSettingsEnv(name)) return blockSettingsEnvOverwrite(`printf -v ${name ?? ''}`);
+    }
+    if (cmd === 'read' || cmd === 'mapfile' || cmd === 'readarray') {
+        const name = args.find(removesSettingsEnv);
+        if (name !== undefined) return blockSettingsEnvOverwrite(`${cmd} ${name}`);
+    }
+    if ((cmd === 'for' || cmd === 'select') && removesSettingsEnv(args[0] ?? '')) {
+        return blockSettingsEnvOverwrite(`${cmd} ${args[0]}`);
+    }
+    if (cmd === 'let') {
+        const expr = args.find((a) => a.includes('GIT_CONFIG') || a.includes('$'));
+        if (expr !== undefined) return blockSettingsEnvOverwrite(`let ${expr}`);
+    }
     if (cmd === 'git') {
         const refusal = checkGit(args, inlineEnv, state.exportedEnv ?? {});
         if (refusal || !state.envCleared) return refusal;
