@@ -78,6 +78,16 @@ const allowed = [
     'env -a GIT_CONFIG_COUNT git status',
     'env -u -i git status',
     'env -i python3 -m pytest',
+    // a nameref to a name other than GIT_CONFIG_* is fine
+    'declare -n r=FOO; git log -1',
+    'local -n ref=arr',
+    'declare -n',
+    // setpriv clears the environment only with --reset-env before its command
+    'setpriv --no-new-privs git status',
+    'setpriv git grep -n -- --reset-env',
+    'setpriv --nnp git grep -n --reset-env',
+    // env -u's value is a name, not a setpriv option
+    'env -u --reset-env git status',
     // only `unset` removes a variable; a word naming one elsewhere is data
     'git grep -n GIT_CONFIG_COUNT',
     // A pattern is protected only when it can match a protected name, whole:
@@ -358,6 +368,16 @@ const blocked = [
     ['setpriv --reset git show', 'setpriv --reset-env'],
     ['setpriv --nnp --reset-env git show', 'setpriv --reset-env'],
     ["setpriv --reset-env bash -c 'git show'", 'setpriv --reset-env'],
+    // a nameref makes `unset r` remove the variable r points to
+    ['declare -n r=GIT_CONFIG_COUNT; unset r; git -C evil log -p -1', 'declare -n r=GIT_CONFIG_COUNT'],
+    ['typeset -n r=GIT_CONFIG_COUNT; unset r; git log -p', 'typeset -n r=GIT_CONFIG_COUNT'],
+    ['local -n r=GIT_CONFIG_COUNT; unset r', 'local -n r=GIT_CONFIG_COUNT'],
+    ['declare -nx r=GIT_CONFIG_KEY_0; unset r; git show', 'declare -n r=GIT_CONFIG_KEY_0'],
+    ['declare -n q=$v; unset q; git show', 'can remove the GIT_CONFIG_'],
+    ['r=GIT_CONFIG_COUNT; declare -n r; unset r; git show', 'declare -n r'],
+    // declare +x un-exports, as export -n does
+    ['declare +x GIT_CONFIG_COUNT; git -C evil log -p -1', 'GIT_CONFIG_COUNT set'],
+    ['typeset +x GIT_CONFIG_KEY_0; git show', 'GIT_CONFIG_KEY_0 set'],
     // the option spellings of GIT_DIR / GIT_WORK_TREE: a named bare repository
     // gets past safe.bareRepository=explicit, so its textconv program would run
     ['git --git-dir=evil log -p -1', '--git-dir'],

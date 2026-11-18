@@ -174,6 +174,8 @@ test('removing the GIT_CONFIG_* settings env still runs the program, so the guar
         'env - git -C evil show',
         'exec -c git -C evil log -p -1',
         'setpriv --reset-env git -C evil log -p -1',
+        // a nameref: `unset r` removes the variable r points to
+        'declare -n r=GIT_CONFIG_COUNT; unset r; git -C evil log -p -1',
     ]) {
         // Run as the agent's shell would (bash, whose exec has -c), with the settings env in place.
         spawnSync('bash', ['-c', command], { cwd: victim, env: agentEnv, encoding: 'utf8' });

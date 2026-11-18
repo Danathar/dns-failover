@@ -1764,15 +1764,6 @@ function checkSegment(words, state) {
                 else if (w[k] === '-c') state = Object.assign(Object.create(state), { envCleared: true });
             }
         }
-        // `setpriv --reset-env` (no root needed) clears the environment too,
-        // keeping only TERM and resetting PATH, HOME and the user names.
-        // expandWrapperOptions has already spelled `--reset` out in full.
-        if (cmd === 'setpriv') {
-            const end = wrapperTarget(w);
-            if (w.slice(1, end === -1 ? w.length : end).includes('--reset-env')) {
-                state = Object.assign(Object.create(state), { envCleared: true });
-            }
-        }
         // Look through the wrapper to the command it runs: skip its own options
         // (and their values), NAME=value words, and operands such as timeout's duration.
         const idx = wrapperTarget(w);
@@ -1783,6 +1774,12 @@ function checkSegment(words, state) {
             }
         }
         if (idx === -1) return null;
+        // `setpriv --reset-env` (no root needed) clears the environment too,
+        // keeping only TERM and resetting PATH, HOME and the user names.
+        // expandWrapperOptions has already spelled `--reset` out in full.
+        if (cmd === 'setpriv' && w.slice(1, idx).includes('--reset-env')) {
+            state = Object.assign(Object.create(state), { envCleared: true });
+        }
         // chroot changes to its new root, nsenter can enter another mount namespace
         // or working directory, and unshare -w/--wd/-R/--root moves too.
         if (cmd === 'chroot' || cmd === 'nsenter') chdir = true;
@@ -1819,7 +1816,18 @@ function checkSegment(words, state) {
     const nested = () => Object.create(here);
     const env = { ...(state.exportedEnv ?? {}), ...inlineEnv };
 
-    if (cmd === 'export' || ((cmd === 'declare' || cmd === 'typeset') && args.some((a) => /^-[a-zA-Z]*x/.test(a)))) {
+    // A nameref (`declare -n r=GIT_CONFIG_COUNT`) makes a later `unset r`
+    // remove the variable it points to, and `unset r` itself looks harmless.
+    // Refuse a nameref whose target contains GIT_CONFIG or is not a plain
+    // word (`declare -n q=$v`), and one with no target given (`declare -n r`
+    // takes r's current value, and a later `r=NAME` sets the target).
+    if ((cmd === 'declare' || cmd === 'typeset' || cmd === 'local') && args.some((a) => /^-[a-zA-Z]*n/.test(a))) {
+        const ref = args.find((a) => !a.startsWith('-') && (!a.includes('=') || removesSettingsEnv(a.slice(a.indexOf('=') + 1))));
+        if (ref !== undefined) return blockSettingsEnvRemoval(`${cmd} -n ${ref}`);
+    }
+    // `declare +x NAME` un-exports NAME, as `export -n NAME` does; both are
+    // recorded so the GIT_CONFIG_* rule in checkGit() refuses a later git.
+    if (cmd === 'export' || ((cmd === 'declare' || cmd === 'typeset') && args.some((a) => /^[-+][a-zA-Z]*x/.test(a)))) {
         for (const a of args) {
             if (a.startsWith('GH_REPO=')) state.exportedGhRepo = a.slice(8);
             // `export GH_REPO+=X` appends to a value this hook may not know: no known repository.
