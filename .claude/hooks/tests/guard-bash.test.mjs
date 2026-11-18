@@ -43,6 +43,8 @@ function run(command, toolName = 'Bash', extra = {}) {
 }
 
 const allowed = [
+    // a value that merely contains `-n` is not a nameref option
+    'declare v=a.b-n; git status',
     "cat <<\\EOF\n$(sudo ls)\nEOF",
     // and so does a `$'...'` one, decoded the way bash decodes it (akmods#188)
     "cat <<$'EOF'\n$(sudo ls)\nEOF",
@@ -372,12 +374,16 @@ const blocked = [
     ['declare -n r=GIT_CONFIG_COUNT; unset r; git -C evil log -p -1', 'declare -n r=GIT_CONFIG_COUNT'],
     ['typeset -n r=GIT_CONFIG_COUNT; unset r; git log -p', 'typeset -n r=GIT_CONFIG_COUNT'],
     ['local -n r=GIT_CONFIG_COUNT; unset r', 'local -n r=GIT_CONFIG_COUNT'],
+    ['declare -gn r=GIT_CONFIG_COUNT; unset r; git show', 'declare -n r=GIT_CONFIG_COUNT'],
+    ['typeset -gn r=GIT_CONFIG_COUNT; unset r; git show', 'typeset -n r=GIT_CONFIG_COUNT'],
     ['declare -nx r=GIT_CONFIG_KEY_0; unset r; git show', 'declare -n r=GIT_CONFIG_KEY_0'],
     ['declare -n q=$v; unset q; git show', 'can remove the GIT_CONFIG_'],
     ['r=GIT_CONFIG_COUNT; declare -n r; unset r; git show', 'declare -n r'],
     // declare +x un-exports, as export -n does
     ['declare +x GIT_CONFIG_COUNT; git -C evil log -p -1', 'GIT_CONFIG_COUNT set'],
     ['typeset +x GIT_CONFIG_KEY_0; git show', 'GIT_CONFIG_KEY_0 set'],
+    ['declare +gx GIT_CONFIG_COUNT; git -C evil log -p -1', 'GIT_CONFIG_COUNT set'],
+    ['typeset +gx GIT_CONFIG_KEY_0; git show', 'GIT_CONFIG_KEY_0 set'],
     // the option spellings of GIT_DIR / GIT_WORK_TREE: a named bare repository
     // gets past safe.bareRepository=explicit, so its textconv program would run
     ['git --git-dir=evil log -p -1', '--git-dir'],
