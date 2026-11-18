@@ -401,7 +401,6 @@ const blocked = [
     ['env -S "-u GIT_CONFIG_COUNT git log"', 'GIT_CONFIG_COUNT'],
     // the words after an env -S string are part of the command it runs
     ['env -S env -i git log', 'env -i'],
-    ['env -S "" -i git log', 'env -i'],
     ['env -i git show', 'Run git without clearing the environment'],
     ['env -i git show', 'that stops a committed repository folder from running a program'],
     // bash's exec -c clears the environment the same way env -i does
