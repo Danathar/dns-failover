@@ -118,6 +118,9 @@ const allowed = [
     'printf -vFOO %s 1; git log -1',
     // `-v` as the first argument of a command that is not printf is not a name
     'ls -v',
+    // an empty env -S string has no first word to read, and the words after it are the command
+    "env -S '' git status",
+    'env -S "" git log -1',
     "printf '%s\\n' GIT_CONFIG_COUNT",
     'printf',
     'read x <<< 1; git log -1',
@@ -396,6 +399,9 @@ const blocked = [
     ["env -iS'git show'", 'env -i'],
     ['env -S "-i git log"', 'env -i'],
     ['env -S "-u GIT_CONFIG_COUNT git log"', 'GIT_CONFIG_COUNT'],
+    // the words after an env -S string are part of the command it runs
+    ['env -S env -i git log', 'env -i'],
+    ['env -S "" -i git log', 'env -i'],
     ['env -i git show', 'Run git without clearing the environment'],
     ['env -i git show', 'that stops a committed repository folder from running a program'],
     // bash's exec -c clears the environment the same way env -i does
