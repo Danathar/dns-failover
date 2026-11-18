@@ -116,6 +116,8 @@ const allowed = [
     // printf -v, read, mapfile, for, select and let setting another name
     'printf -v FOO %s 1; git log -1',
     'printf -vFOO %s 1; git log -1',
+    // `-v` as the first argument of a command that is not printf is not a name
+    'ls -v',
     "printf '%s\\n' GIT_CONFIG_COUNT",
     'printf',
     'read x <<< 1; git log -1',
@@ -392,6 +394,8 @@ const blocked = [
     ['env -i timeout 5 git show', 'env -i'],
     ["env -i bash -c 'git show'", 'env -i'],
     ["env -iS'git show'", 'env -i'],
+    ['env -S "-i git log"', 'env -i'],
+    ['env -S "-u GIT_CONFIG_COUNT git log"', 'GIT_CONFIG_COUNT'],
     ['env -i git show', 'Run git without clearing the environment'],
     ['env -i git show', 'that stops a committed repository folder from running a program'],
     // bash's exec -c clears the environment the same way env -i does

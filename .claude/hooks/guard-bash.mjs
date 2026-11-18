@@ -1777,6 +1777,9 @@ function checkSegment(words, state) {
                 const alone = checkCommand(script, state);
                 if (alone) return alone;
                 const head = tokenize(script).flat();
+                // An option at the start of the string is an env option
+                // (`env -S "-i git log"`), so check it with env in front.
+                if (head.length && head[0].startsWith('-')) return checkSegment(['env', ...head, ...w.slice(rest)], state);
                 return checkSegment([...head, ...w.slice(rest)], state);
             }
         }
