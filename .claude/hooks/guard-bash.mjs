@@ -442,8 +442,10 @@ function riskyVariable(env) {
 // .claude/settings.json sets safe.bareRepository=explicit through
 // GIT_CONFIG_COUNT / GIT_CONFIG_KEY_0 / GIT_CONFIG_VALUE_0. Removing any of
 // them (`unset`, `env -u`) puts git back on its default, and a committed bare
-// repository's diff.*.textconv runs again. Setting them is refused through
-// riskyVariable(); this is the removal side. A name is refused when it
+// repository's diff.*.textconv runs again. Setting them for one command
+// (`GIT_CONFIG_COUNT=0 git show`) is refused through riskyVariable(), and
+// setting them as a statement through blockSettingsEnvOverwrite() below;
+// this is the removal side. A name is refused when it
 // contains GIT_CONFIG anywhere, and so is any word bash rewrites before
 // unset or env sees it: `${!GIT_CONFIG@}` and `${!GIT_CONFIG*}` (every set
 // name with that prefix), `$v` (a name held in a variable), `GIT_{CONFIG_COUNT,X}`
@@ -457,6 +459,23 @@ function blockSettingsEnvRemoval(what) {
     return block(
         `Blocked: \`${what}\` can remove the GIT_CONFIG_* settings env in .claude/settings.json that stops a ` +
             'committed repository folder from running a program. Leave it set.'
+    );
+}
+
+// A bare `GIT_CONFIG_COUNT=0` (or `GIT_CONFIG_VALUE_0=all`, `+=`, `[0]=`) and
+// `declare` / `typeset` / `local` / `readonly` with such an operand change
+// the value and keep the variable exported, so git reads the new value: the
+// same effect as removing it. The name an assignment word or operand sets
+// (`NAME=`, `NAME+=`, `NAME[i]=`), or null when the word assigns nothing.
+function assignedName(word) {
+    const eq = word.indexOf('=');
+    return eq === -1 ? null : word.slice(0, eq).replace(/(?:\[.*\])?\+?$/, '');
+}
+
+function blockSettingsEnvOverwrite(what) {
+    return block(
+        `Blocked: \`${what}\` overwrites the GIT_CONFIG_* settings env in .claude/settings.json that stops a ` +
+            'committed repository folder from running a program; the variable stays exported, so git reads the new value. Leave it set.'
     );
 }
 
@@ -1678,7 +1697,14 @@ function checkSegment(words, state) {
             if (w[0] === 'function' || (w[0] === 'coproc' && w[2] === '{')) w.shift();
             w.shift();
         }
-        if (!w.length) return null;
+        // `GIT_CONFIG_COUNT[0]=0` is an assignment too (isAssignment() reads no subscript).
+        if (w.length && /^\w*GIT_CONFIG\w*\[[^=]*\]\+?=/.test(w[0])) return blockSettingsEnvOverwrite(w[0]);
+        if (!w.length) {
+            // Only assignments: they set shell variables, and an exported one keeps its export.
+            const name = Object.keys(inlineEnv).find((k) => k.includes('GIT_CONFIG'));
+            if (name !== undefined) return blockSettingsEnvOverwrite(`${name}=${inlineEnv[name]}`);
+            return null;
+        }
         // A command name the shell builds into a checked one (#124). Braces are
         // refused: `{git,diff} --no-index a b` is `git diff --no-index a b`, and
         // the words they add are not modelled. A wildcard in a path is read as
@@ -1842,6 +1868,11 @@ function checkSegment(words, state) {
             }
         }
         return null;
+    }
+    if (cmd === 'declare' || cmd === 'typeset' || cmd === 'local' || cmd === 'readonly') {
+        // `declare $v=0` sets the name $v holds: refused like `unset $v`.
+        const op = args.find((a) => assignedName(a) !== null && removesSettingsEnv(assignedName(a)));
+        if (op !== undefined) return blockSettingsEnvOverwrite(`${cmd} ${op}`);
     }
     if (cmd === 'cd' || cmd === 'pushd') {
         state.cwd = cdTarget(args, state);

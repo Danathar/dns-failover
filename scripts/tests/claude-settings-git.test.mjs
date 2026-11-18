@@ -152,8 +152,8 @@ test('a command-line safe.bareRepository override still runs the program, so the
 
 // The protection lasts only while the GIT_CONFIG_* settings env is set. A
 // command that removes it (`unset`, also as `unset ${!GIT_CONFIG@}` or
-// `unset $v`, `env -u`) or clears the whole environment before git (`env -i`,
-// a lone `-`) puts safe.bareRepository back on its default, and the planted
+// `unset $v`, `env -u`), overwrites it (`GIT_CONFIG_COUNT=0`) or clears the
+// whole environment before git (`env -i`, a lone `-`) puts safe.bareRepository back on its default, and the planted
 // program runs again. The guard hook refuses them.
 test('removing the GIT_CONFIG_* settings env still runs the program, so the guard hook refuses it', (t) => {
     const dir = mkdtempSync(join(tmpdir(), 'bare-repo-'));
@@ -176,6 +176,10 @@ test('removing the GIT_CONFIG_* settings env still runs the program, so the guar
         'setpriv --reset-env git -C evil log -p -1',
         // a nameref: `unset r` removes the variable r points to
         'declare -n r=GIT_CONFIG_COUNT; unset r; git -C evil log -p -1',
+        // overwriting it as a statement keeps it exported with the new value
+        'GIT_CONFIG_COUNT=0; git -C evil log -p -1',
+        'GIT_CONFIG_VALUE_0=all; git -C evil log -p -1',
+        'declare GIT_CONFIG_COUNT=0; git -C evil log -p -1',
     ]) {
         // Run as the agent's shell would (bash, whose exec has -c), with the settings env in place.
         spawnSync('bash', ['-c', command], { cwd: victim, env: agentEnv, encoding: 'utf8' });

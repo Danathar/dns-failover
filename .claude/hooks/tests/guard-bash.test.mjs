@@ -92,6 +92,23 @@ const allowed = [
     'env -u --reset-env git status',
     // only `unset` removes a variable; a word naming one elsewhere is data
     'git grep -n GIT_CONFIG_COUNT',
+    // Assigning a variable other than GIT_CONFIG_* (the settings env) is fine,
+    // and so is reading one or naming it in an argument.
+    'FOO=1; git log -1',
+    'FOO=1 BAR=2',
+    'FOO+=1; git log -1',
+    'echo $GIT_CONFIG_COUNT',
+    'echo GIT_CONFIG_COUNT=1',
+    'declare FOO=1; git log -1',
+    'declare -g FOO=bar; git log -1',
+    'typeset FOO=1; git log -1',
+    'local x=1',
+    'readonly FOO=1; git log -1',
+    'declare FOO+=1; git log -1',
+    'declare a[10]=1; git log -1',
+    // a bare `declare NAME` changes neither the value nor the export, and
+    // `+x` inside an operand's value is not declare's +x option
+    'declare v=a+x GIT_CONFIG_COUNT; git status',
     // A pattern is protected only when it can match a protected name, whole:
     // `check*.py` cannot be dns-upstream-check.py, and an unclosed `[` is a literal.
     'python3 scripts/check*.py',
@@ -379,6 +396,24 @@ const blocked = [
     ['declare -nx r=GIT_CONFIG_KEY_0; unset r; git show', 'declare -n r=GIT_CONFIG_KEY_0'],
     ['declare -n q=$v; unset q; git show', 'can remove the GIT_CONFIG_'],
     ['r=GIT_CONFIG_COUNT; declare -n r; unset r; git show', 'declare -n r'],
+    // Overwriting the settings env as a statement keeps it exported with the
+    // new value, the same as removing it.
+    ['GIT_CONFIG_COUNT=0; git -C evil log -p -1', 'overwrites the GIT_CONFIG_'],
+    ['GIT_CONFIG_VALUE_0=all; git -C evil log -p -1', 'GIT_CONFIG_VALUE_0=all'],
+    ['GIT_CONFIG_COUNT=0', 'GIT_CONFIG_COUNT=0'],
+    ['FOO=1 GIT_CONFIG_KEY_0=x; git show', 'GIT_CONFIG_KEY_0=x'],
+    ['GIT_CONFIG_COUNT+=1; git show', 'GIT_CONFIG_COUNT+=1'],
+    ['GIT_CONFIG_COUNT[0]=0; git show', 'GIT_CONFIG_COUNT[0]=0'],
+    ['GIT_CONFIG_VALUE_0[1]+=x; git show', 'overwrites the GIT_CONFIG_'],
+    ["bash -c 'GIT_CONFIG_COUNT=0; git show'", 'overwrites the GIT_CONFIG_'],
+    ['declare GIT_CONFIG_COUNT=0; git show', 'declare GIT_CONFIG_COUNT=0'],
+    ['declare -g GIT_CONFIG_COUNT=0; git show', 'declare GIT_CONFIG_COUNT=0'],
+    ['typeset GIT_CONFIG_VALUE_0=all; git show', 'typeset GIT_CONFIG_VALUE_0=all'],
+    ['local GIT_CONFIG_COUNT=0', 'local GIT_CONFIG_COUNT=0'],
+    ['readonly GIT_CONFIG_COUNT=0; git show', 'readonly GIT_CONFIG_COUNT=0'],
+    ['declare FOO=1 GIT_CONFIG_COUNT+=1; git show', 'declare GIT_CONFIG_COUNT+=1'],
+    ['declare GIT_CONFIG_COUNT[0]=0; git show', 'declare GIT_CONFIG_COUNT[0]=0'],
+    ['declare $v=0; git show', 'overwrites the GIT_CONFIG_'],
     // declare +x un-exports, as export -n does
     ['declare +x GIT_CONFIG_COUNT; git -C evil log -p -1', 'GIT_CONFIG_COUNT set'],
     ['typeset +x GIT_CONFIG_KEY_0; git show', 'GIT_CONFIG_KEY_0 set'],
