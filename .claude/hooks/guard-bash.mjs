@@ -453,6 +453,16 @@ function checkGit(args, inlineEnv = {}, exported = {}) {
         if (configKey !== null && EXEC_GIT_CONFIG.test(configKey)) {
             return block(`Blocked: \`git ${a} ${configKey}=...\` makes git run a program or read other config.`);
         }
+        // `-c` is read at the same scope as the GIT_CONFIG_* settings env and
+        // wins over it, so `-c safe.bareRepository=all` would switch off the
+        // protection .claude/settings.json sets. The env spellings are refused
+        // through riskyVariable() below; this refuses the option spellings.
+        if (configKey !== null && /^safe\./i.test(configKey)) {
+            return block(
+                `Blocked: \`git ${a} ${configKey}=...\` overrides the safe.* setting in .claude/settings.json ` +
+                    'that stops a committed repository folder from running a program. Run git without it.'
+            );
+        }
         if (a.startsWith('--exec-path=')) {
             return block('Blocked: `git --exec-path=DIR` runs git commands from another directory.');
         }

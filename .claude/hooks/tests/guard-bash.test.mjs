@@ -65,6 +65,8 @@ const allowed = [
     'git show HEAD:dns-upstream-check.py',
     // a --bare after the subcommand is not git's global option
     'git log --oneline -- --bare',
+    // only a key in the safe.* section is refused, not one that merely contains it
+    'git -c branch.unsafe.merge=x status',
     // A pattern is protected only when it can match a protected name, whole:
     // `check*.py` cannot be dns-upstream-check.py, and an unclosed `[` is a literal.
     'python3 scripts/check*.py',
@@ -261,6 +263,17 @@ const blocked = [
     ['GIT_PAGER=./x.sh git log', 'GIT_PAGER'],
     ['GIT_TRACE=monitor.py git status', 'GIT_TRACE'],
     ['GIT_DIR=/tmp/other/.git git log', 'GIT_DIR'],
+    // `-c` / `--config-env` would override the safe.bareRepository=explicit
+    // settings env, so a discovered bare repository's textconv would run again
+    ['git -c safe.bareRepository=all -C evil log -p -1', 'safe.bareRepository'],
+    ['git -c safe.bareRepository=all show', 'safe.bareRepository'],
+    ['git -c SAFE.BAREREPOSITORY=all show', 'SAFE.BAREREPOSITORY'],
+    ['git -c safe.directory=* -C evil show', 'safe.directory'],
+    ['SBR=all git --config-env=safe.bareRepository=SBR -C evil show', 'safe.bareRepository'],
+    ['git --config-env safe.bareRepository=SBR show', 'safe.bareRepository'],
+    ['cd evil && git -c safe.bareRepository=all show', 'safe.bareRepository'],
+    ['git -c user.name=x -c safe.bareRepository=all show', 'safe.bareRepository'],
+    ['git -c safe.bareRepository=all log -p', 'Run git without it'],
     // the option spellings of GIT_DIR / GIT_WORK_TREE: a named bare repository
     // gets past safe.bareRepository=explicit, so its textconv program would run
     ['git --git-dir=evil log -p -1', '--git-dir'],
