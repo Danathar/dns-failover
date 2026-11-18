@@ -353,6 +353,11 @@ const blocked = [
     ['exec -c -a x git show', 'exec -c'],
     ['exec -c -- git show', 'exec -c'],
     ["exec -c bash -c 'git show'", 'exec -c'],
+    // setpriv --reset-env clears it too, without root
+    ['setpriv --reset-env git -C evil log -p -1', 'setpriv --reset-env'],
+    ['setpriv --reset git show', 'setpriv --reset-env'],
+    ['setpriv --nnp --reset-env git show', 'setpriv --reset-env'],
+    ["setpriv --reset-env bash -c 'git show'", 'setpriv --reset-env'],
     // the option spellings of GIT_DIR / GIT_WORK_TREE: a named bare repository
     // gets past safe.bareRepository=explicit, so its textconv program would run
     ['git --git-dir=evil log -p -1', '--git-dir'],

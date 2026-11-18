@@ -1764,6 +1764,15 @@ function checkSegment(words, state) {
                 else if (w[k] === '-c') state = Object.assign(Object.create(state), { envCleared: true });
             }
         }
+        // `setpriv --reset-env` (no root needed) clears the environment too,
+        // keeping only TERM and resetting PATH, HOME and the user names.
+        // expandWrapperOptions has already spelled `--reset` out in full.
+        if (cmd === 'setpriv') {
+            const end = wrapperTarget(w);
+            if (w.slice(1, end === -1 ? w.length : end).includes('--reset-env')) {
+                state = Object.assign(Object.create(state), { envCleared: true });
+            }
+        }
         // Look through the wrapper to the command it runs: skip its own options
         // (and their values), NAME=value words, and operands such as timeout's duration.
         const idx = wrapperTarget(w);
@@ -1851,7 +1860,7 @@ function checkSegment(words, state) {
         const refusal = checkGit(args, inlineEnv, state.exportedEnv ?? {});
         if (refusal || !state.envCleared) return refusal;
         return block(
-            'Blocked: `env -i` (`--ignore-environment`, a lone `-`) and `exec -c` run git without the GIT_CONFIG_* settings env in ' +
+            'Blocked: `env -i` (`--ignore-environment`, a lone `-`), `exec -c` and `setpriv --reset-env` run git without the GIT_CONFIG_* settings env in ' +
                 '.claude/settings.json that stops a committed repository folder from running a program. ' +
                 'Run git without clearing the environment.'
         );
