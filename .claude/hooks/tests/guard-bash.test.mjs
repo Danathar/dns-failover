@@ -43,6 +43,8 @@ function run(command, toolName = 'Bash', extra = {}) {
 }
 
 const allowed = [
+    // a value that merely contains `-n` is not a nameref option
+    'declare v=a.b-n; git status',
     "cat <<\\EOF\n$(sudo ls)\nEOF",
     // and so does a `$'...'` one, decoded the way bash decodes it (akmods#188)
     "cat <<$'EOF'\n$(sudo ls)\nEOF",
@@ -67,6 +69,69 @@ const allowed = [
     'git log --oneline -- --bare',
     // only a key in the safe.* section is refused, not one that merely contains it
     'git -c branch.unsafe.merge=x status',
+    // Removing a variable other than GIT_CONFIG_* (the settings env) is fine,
+    // and so is clearing the environment for a command that is not git.
+    'unset FOO; git log -1',
+    'unset -v FOO; git log -1',
+    'env -u FOO git log -1',
+    'env -u',
+    'env LANG=C git log -1',
+    // -a's value is the $0 name and -u's value is one word, not env's -i.
+    'env -a GIT_CONFIG_COUNT git status',
+    'env -u -i git status',
+    'env -i python3 -m pytest',
+    // a nameref to a name other than GIT_CONFIG_* is fine
+    'declare -n r=FOO; git log -1',
+    'local -n ref=arr',
+    'declare -n',
+    // setpriv clears the environment only with --reset-env before its command
+    'setpriv --no-new-privs git status',
+    'setpriv git grep -n -- --reset-env',
+    'setpriv --nnp git grep -n --reset-env',
+    // env -u's value is a name, not a setpriv option
+    'env -u --reset-env git status',
+    // only `unset` removes a variable; a word naming one elsewhere is data
+    'git grep -n GIT_CONFIG_COUNT',
+    // Assigning a variable other than GIT_CONFIG_* (the settings env) is fine,
+    // and so is reading one or naming it in an argument.
+    'FOO=1; git log -1',
+    'FOO=1 BAR=2',
+    'FOO+=1; git log -1',
+    'echo $GIT_CONFIG_COUNT',
+    'echo GIT_CONFIG_COUNT=1',
+    'declare FOO=1; git log -1',
+    'declare -g FOO=bar; git log -1',
+    'typeset FOO=1; git log -1',
+    'local x=1',
+    'readonly FOO=1; git log -1',
+    'declare FOO+=1; git log -1',
+    'declare a[10]=1; git log -1',
+    // a bare `declare NAME` changes neither the value nor the export, and
+    // `+x` inside an operand's value is not declare's +x option
+    'declare v=a+x GIT_CONFIG_COUNT; git status',
+    // a word that only contains GIT_CONFIG after a non-word character, or in
+    // an assignment's value, is not a subscripted GIT_CONFIG_* assignment
+    'x.GIT_CONFIG_COUNT[1]=2',
+    'FOO=GIT_CONFIG_X[1]=2',
+    // printf -v, read, mapfile, for, select and let setting another name
+    'printf -v FOO %s 1; git log -1',
+    'printf -vFOO %s 1; git log -1',
+    // `-v` as the first argument of a command that is not printf is not a name
+    'ls -v',
+    // an empty env -S string has no first word to read, and the words after it are the command
+    "env -S '' git status",
+    'env -S "" git log -1',
+    "printf '%s\\n' GIT_CONFIG_COUNT",
+    'printf',
+    'read x <<< 1; git log -1',
+    'read -r a b <<< 1',
+    'mapfile -t lines < /dev/null; git log -1',
+    'readarray lines < /dev/null',
+    'for i in 1 2; do echo $i; done',
+    'for ((;;)); do break; done',
+    'select x in a b; do break; done <<< 1',
+    'let i=1+2; git log -1',
+    'echo GIT_CONFIG_COUNT',
     // A pattern is protected only when it can match a protected name, whole:
     // `check*.py` cannot be dns-upstream-check.py, and an unclosed `[` is a literal.
     'python3 scripts/check*.py',
@@ -205,10 +270,22 @@ const allowed = [
     // A wrapper option's value is not the command it runs.
     'env -a git git status',
     'exec -a git git status',
-    'env - git status',
+    'env - gh pr list',
     // Packed and abbreviated wrapper options still reach the command they wrap.
     'timeout -vk 5 10 git status',
-    'env -iu X git status',
+    'env -iu X gh pr list',
+    'exec -c python3 -m pytest',
+    // exec's own options end at its first non-option word or `--`, -a takes a
+    // value, and only -c clears the environment: git's own -c, exec -l, the
+    // value of -a and a bare `exec -c` leave git with the settings env.
+    'exec git -c user.name=x status',
+    'exec -l git status',
+    'exec -a -c git status',
+    'exec -c',
+    // another wrapper's -c (ionice's class) is not exec's -c
+    'ionice -c 3 git status',
+    // an option value that merely looks like a GIT_CONFIG_* name unsets nothing
+    'env --argv0=GIT_CONFIG_COUNT git status',
     'env -a X git status',
     // -a's value is the $0 name, not an env -S command string.
     "env -a '-Sgit push --force' git status",
@@ -274,6 +351,125 @@ const blocked = [
     ['cd evil && git -c safe.bareRepository=all show', 'safe.bareRepository'],
     ['git -c user.name=x -c safe.bareRepository=all show', 'safe.bareRepository'],
     ['git -c safe.bareRepository=all log -p', 'Run git without it'],
+    // Removing the GIT_CONFIG_* settings env (unset, env -u) or clearing the
+    // whole environment before git (env -i, --ignore-environment, a lone `-`)
+    // puts safe.bareRepository back on its default, so a discovered bare
+    // repository's textconv would run again
+    ['env -u GIT_CONFIG_COUNT git -C evil log -p -1', 'env -u GIT_CONFIG_COUNT'],
+    ['env --unset GIT_CONFIG_KEY_0 git show', 'env -u GIT_CONFIG_KEY_0'],
+    ['env --unset=GIT_CONFIG_COUNT git log -p', 'env -u GIT_CONFIG_COUNT'],
+    ['env -uGIT_CONFIG_VALUE_0 git show', 'env -u GIT_CONFIG_VALUE_0'],
+    ['env --uns GIT_CONFIG_COUNT git show', 'env -u GIT_CONFIG_COUNT'],
+    ['env -u FOO -u GIT_CONFIG_COUNT git show', 'env -u GIT_CONFIG_COUNT'],
+    ['env -iu GIT_CONFIG_COUNT python3 -m pytest', 'env -u GIT_CONFIG_COUNT'],
+    ['timeout 5 env -u GIT_CONFIG_COUNT git show', 'env -u GIT_CONFIG_COUNT'],
+    ['env -u GIT_CONFIG_COUNT git show', 'Leave it set'],
+    ['unset GIT_CONFIG_COUNT; git -C evil log -p -1', 'unset GIT_CONFIG_COUNT'],
+    ['unset GIT_CONFIG_COUNT', 'unset GIT_CONFIG_COUNT'],
+    ['unset -v GIT_CONFIG_KEY_0 && git show', 'unset GIT_CONFIG_KEY_0'],
+    ['unset FOO GIT_CONFIG_VALUE_0; git show', 'unset GIT_CONFIG_VALUE_0'],
+    ['builtin unset GIT_CONFIG_COUNT; git show', 'unset GIT_CONFIG_COUNT'],
+    ["bash -c 'unset GIT_CONFIG_COUNT; git show'", 'unset GIT_CONFIG_COUNT'],
+    ["eval 'unset GIT_CONFIG_COUNT'; git show", 'unset GIT_CONFIG_COUNT'],
+    // a name that contains GIT_CONFIG anywhere, and any word bash rewrites
+    // before unset or env sees it: ${!GIT_CONFIG@} / ${!GIT_CONFIG*} expand to
+    // every set GIT_CONFIG_* name, $v to the name it holds, braces and globs
+    // to names the hook cannot see
+    ['unset NOT_GIT_CONFIG_COUNT; git log -1', 'unset NOT_GIT_CONFIG_COUNT'],
+    ['env -u NOT_GIT_CONFIG_COUNT git log -1', 'env -u NOT_GIT_CONFIG_COUNT'],
+    ['unset ${!GIT_CONFIG@}; git -C evil log -p -1', 'can remove the GIT_CONFIG_'],
+    ['unset ${!GIT_CONFIG*}; git show', 'can remove the GIT_CONFIG_'],
+    ['unset -v ${!GIT_CONFIG@}', 'can remove the GIT_CONFIG_'],
+    ["bash -c 'unset ${!GIT_CONFIG@}; git show'", 'can remove the GIT_CONFIG_'],
+    ['v=GIT_CONFIG_COUNT; unset $v; git -C evil log -p -1', 'can remove the GIT_CONFIG_'],
+    ['unset "$v"; git show', 'can remove the GIT_CONFIG_'],
+    ['unset FOO $v; git show', 'can remove the GIT_CONFIG_'],
+    ['unset GIT_{CONFIG_COUNT,X}; git show', 'can remove the GIT_CONFIG_'],
+    ['unset GIT_CONF*; git show', 'can remove the GIT_CONFIG_'],
+    ['env -u $v git show', 'can remove the GIT_CONFIG_'],
+    ['env --unset=${v} git show', 'can remove the GIT_CONFIG_'],
+    ['env -i git -C evil log -p -1', 'env -i'],
+    ['env --ignore-environment git show', 'env -i'],
+    ['env --ignore-e git show', 'env -i'],
+    ['env - git status', 'env -i'],
+    ['env -iu X git status', 'env -i'],
+    ['env -i PATH=/usr/bin git log -p', 'env -i'],
+    ['env -i timeout 5 git show', 'env -i'],
+    ["env -i bash -c 'git show'", 'env -i'],
+    ["env -iS'git show'", 'env -i'],
+    ['env -S "-i git log"', 'env -i'],
+    ['env -S "-u GIT_CONFIG_COUNT git log"', 'GIT_CONFIG_COUNT'],
+    // the words after an env -S string are part of the command it runs
+    ['env -S env -i git log', 'env -i'],
+    ['env -i git show', 'Run git without clearing the environment'],
+    ['env -i git show', 'that stops a committed repository folder from running a program'],
+    // bash's exec -c clears the environment the same way env -i does
+    ['exec -c git -C evil log -p -1', 'exec -c'],
+    ['exec -cl git show', 'exec -c'],
+    ['exec -c -a x git show', 'exec -c'],
+    ['exec -c -- git show', 'exec -c'],
+    ["exec -c bash -c 'git show'", 'exec -c'],
+    // setpriv --reset-env clears it too, without root
+    ['setpriv --reset-env git -C evil log -p -1', 'setpriv --reset-env'],
+    ['setpriv --reset git show', 'setpriv --reset-env'],
+    ['setpriv --nnp --reset-env git show', 'setpriv --reset-env'],
+    ["setpriv --reset-env bash -c 'git show'", 'setpriv --reset-env'],
+    // a nameref makes `unset r` remove the variable r points to
+    ['declare -n r=GIT_CONFIG_COUNT; unset r; git -C evil log -p -1', 'declare -n r=GIT_CONFIG_COUNT'],
+    ['typeset -n r=GIT_CONFIG_COUNT; unset r; git log -p', 'typeset -n r=GIT_CONFIG_COUNT'],
+    ['local -n r=GIT_CONFIG_COUNT; unset r', 'local -n r=GIT_CONFIG_COUNT'],
+    ['declare -gn r=GIT_CONFIG_COUNT; unset r; git show', 'declare -n r=GIT_CONFIG_COUNT'],
+    ['typeset -gn r=GIT_CONFIG_COUNT; unset r; git show', 'typeset -n r=GIT_CONFIG_COUNT'],
+    ['declare -nx r=GIT_CONFIG_KEY_0; unset r; git show', 'declare -n r=GIT_CONFIG_KEY_0'],
+    ['declare -n q=$v; unset q; git show', 'can remove the GIT_CONFIG_'],
+    ['r=GIT_CONFIG_COUNT; declare -n r; unset r; git show', 'declare -n r'],
+    // Overwriting the settings env as a statement keeps it exported with the
+    // new value, the same as removing it.
+    ['GIT_CONFIG_COUNT=0; git -C evil log -p -1', 'overwrites the GIT_CONFIG_'],
+    ['GIT_CONFIG_VALUE_0=all; git -C evil log -p -1', 'GIT_CONFIG_VALUE_0=all'],
+    ['GIT_CONFIG_COUNT=0', 'GIT_CONFIG_COUNT=0'],
+    ['FOO=1 GIT_CONFIG_KEY_0=x; git show', 'GIT_CONFIG_KEY_0=x'],
+    ['GIT_CONFIG_COUNT+=1; git show', 'GIT_CONFIG_COUNT+=1'],
+    ['GIT_CONFIG_COUNT[0]=0; git show', 'GIT_CONFIG_COUNT[0]=0'],
+    ['GIT_CONFIG_VALUE_0[1]+=x; git show', 'overwrites the GIT_CONFIG_'],
+    ["bash -c 'GIT_CONFIG_COUNT=0; git show'", 'overwrites the GIT_CONFIG_'],
+    ['declare GIT_CONFIG_COUNT=0; git show', 'declare GIT_CONFIG_COUNT=0'],
+    ['declare -g GIT_CONFIG_COUNT=0; git show', 'declare GIT_CONFIG_COUNT=0'],
+    ['typeset GIT_CONFIG_VALUE_0=all; git show', 'typeset GIT_CONFIG_VALUE_0=all'],
+    ['local GIT_CONFIG_COUNT=0', 'local GIT_CONFIG_COUNT=0'],
+    ['readonly GIT_CONFIG_COUNT=0; git show', 'readonly GIT_CONFIG_COUNT=0'],
+    ['declare FOO=1 GIT_CONFIG_COUNT+=1; git show', 'declare GIT_CONFIG_COUNT+=1'],
+    ['declare GIT_CONFIG_COUNT[0]=0; git show', 'declare GIT_CONFIG_COUNT[0]=0'],
+    ['declare $v=0; git show', 'overwrites the GIT_CONFIG_'],
+    // declare +x un-exports, as export -n does
+    ['declare +x GIT_CONFIG_COUNT; git -C evil log -p -1', 'GIT_CONFIG_COUNT set'],
+    ['typeset +x GIT_CONFIG_KEY_0; git show', 'GIT_CONFIG_KEY_0 set'],
+    ['declare +gx GIT_CONFIG_COUNT; git -C evil log -p -1', 'GIT_CONFIG_COUNT set'],
+    ['typeset +gx GIT_CONFIG_KEY_0; git show', 'GIT_CONFIG_KEY_0 set'],
+    ['GIT_CONFIG_COUNT=0; git show', 'the variable stays exported, so git reads the new value'],
+    // a subscript longer than one character, and a name with a prefix
+    ['GIT_CONFIG_COUNT[10]=0; git show', 'GIT_CONFIG_COUNT[10]=0'],
+    ['NOT_GIT_CONFIG_COUNT[0]=0; git show', 'NOT_GIT_CONFIG_COUNT[0]=0'],
+    ['GIT_CONFIG_VALUE_0[10]+=all; git show', 'GIT_CONFIG_VALUE_0[10]+=all'],
+    // other builtins that set a variable as a statement
+    ['printf -v GIT_CONFIG_COUNT %s 0; git -C evil log -p -1', 'printf -v GIT_CONFIG_COUNT'],
+    ['printf -v GIT_CONFIG_VALUE_0 %s all; git show', 'printf -v GIT_CONFIG_VALUE_0'],
+    ['printf -vGIT_CONFIG_COUNT %s 0; git show', 'printf -v GIT_CONFIG_COUNT'],
+    ['printf -v $v %s 0; git show', 'printf -v $v'],
+    ['printf -v', '`printf -v ` overwrites the GIT_CONFIG_'],
+    ['read GIT_CONFIG_COUNT <<< 0; git -C evil log -p -1', 'read GIT_CONFIG_COUNT'],
+    ['read -r FOO GIT_CONFIG_VALUE_0 <<< 0; git show', 'read GIT_CONFIG_VALUE_0'],
+    ['read -a GIT_CONFIG_COUNT <<< 0; git show', 'read GIT_CONFIG_COUNT'],
+    ['read $v <<< 0; git show', 'read $v'],
+    ['mapfile GIT_CONFIG_COUNT < /dev/null; git -C evil log -p -1', 'mapfile GIT_CONFIG_COUNT'],
+    ['readarray -t GIT_CONFIG_VALUE_0 < /dev/null; git show', 'readarray GIT_CONFIG_VALUE_0'],
+    ['for GIT_CONFIG_COUNT in 0; do git -C evil log -p -1; done', 'for GIT_CONFIG_COUNT'],
+    ['for $v in 0; do git show; done', 'for $v'],
+    ['select GIT_CONFIG_COUNT in 0; do git show; break; done <<< 1', 'select GIT_CONFIG_COUNT'],
+    ['let GIT_CONFIG_COUNT=0; git -C evil log -p -1', 'let GIT_CONFIG_COUNT=0'],
+    ['let x=GIT_CONFIG_VALUE_0=1; git show', 'let x=GIT_CONFIG_VALUE_0=1'],
+    ['let $v=0; git show', 'let $v=0'],
+    ["bash -c 'printf -v GIT_CONFIG_COUNT %s 0; git show'", 'printf -v GIT_CONFIG_COUNT'],
     // the option spellings of GIT_DIR / GIT_WORK_TREE: a named bare repository
     // gets past safe.bareRepository=explicit, so its textconv program would run
     ['git --git-dir=evil log -p -1', '--git-dir'],
