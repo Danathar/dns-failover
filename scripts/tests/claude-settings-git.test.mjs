@@ -149,3 +149,55 @@ test('a command-line safe.bareRepository override still runs the program, so the
         assert.match(r.stderr, /safe\.bareRepository/);
     }
 });
+
+// The protection lasts only while the GIT_CONFIG_* settings env is set. A
+// command that removes it (`unset`, also as `unset ${!GIT_CONFIG@}` or
+// `unset $v`, `env -u`), overwrites it (`GIT_CONFIG_COUNT=0`, `printf -v`,
+// `read`, `let`, `mapfile`, a `for` variable) or clears the
+// whole environment before git (`env -i`, a lone `-`) puts safe.bareRepository back on its default, and the planted
+// program runs again. The guard hook refuses them.
+test('removing the GIT_CONFIG_* settings env still runs the program, so the guard hook refuses it', (t) => {
+    const dir = mkdtempSync(join(tmpdir(), 'bare-repo-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const marker = join(dir, 'ran');
+    const victim = plantedClone(dir, marker);
+    const agentEnv = { ...baseEnv(dir), ...settingsEnv };
+    const hook = fileURLToPath(new URL('../../.claude/hooks/guard-bash.mjs', import.meta.url));
+
+    for (const command of [
+        'env -u GIT_CONFIG_COUNT git -C evil log -p -1',
+        'env --unset=GIT_CONFIG_COUNT git -C evil show',
+        'unset GIT_CONFIG_COUNT; git -C evil log -p -1',
+        // ${!GIT_CONFIG@} expands to every set GIT_CONFIG_* name; $v to the name it holds
+        'unset ${!GIT_CONFIG@}; git -C evil log -p -1',
+        'v=GIT_CONFIG_COUNT; unset $v; git -C evil log -p -1',
+        'env -i git -C evil log -p -1',
+        'env - git -C evil show',
+        'exec -c git -C evil log -p -1',
+        'setpriv --reset-env git -C evil log -p -1',
+        // a nameref: `unset r` removes the variable r points to
+        'declare -n r=GIT_CONFIG_COUNT; unset r; git -C evil log -p -1',
+        // overwriting it as a statement keeps it exported with the new value
+        'GIT_CONFIG_COUNT=0; git -C evil log -p -1',
+        'GIT_CONFIG_VALUE_0=all; git -C evil log -p -1',
+        'declare GIT_CONFIG_COUNT=0; git -C evil log -p -1',
+        // and so does setting it through another builtin, or as a loop variable
+        'printf -v GIT_CONFIG_COUNT %s 0; git -C evil log -p -1',
+        'read GIT_CONFIG_COUNT <<< 0; git -C evil log -p -1',
+        'let GIT_CONFIG_COUNT=0; git -C evil log -p -1',
+        'for GIT_CONFIG_COUNT in 0; do git -C evil log -p -1; done',
+        'mapfile GIT_CONFIG_COUNT < /dev/null; git -C evil log -p -1',
+    ]) {
+        // Run as the agent's shell would (bash, whose exec has -c), with the settings env in place.
+        spawnSync('bash', ['-c', command], { cwd: victim, env: agentEnv, encoding: 'utf8' });
+        assert.ok(existsSync(marker), `${command} no longer runs the program; this test needs a new route`);
+        rmSync(marker);
+
+        const r = spawnSync(process.execPath, [hook], {
+            input: JSON.stringify({ tool_name: 'Bash', tool_input: { command } }),
+            encoding: 'utf8',
+        });
+        assert.equal(r.status, 2, `the guard hook should refuse ${command}: ${r.stderr}`);
+        assert.match(r.stderr, /GIT_CONFIG_\* settings env/);
+    }
+});
