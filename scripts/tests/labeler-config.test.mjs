@@ -60,7 +60,7 @@ const unquote = (s) => s.trim().replace(/^(['"])(.*)\1$/, '$2');
 function globsOf(configText) {
     const globs = [];
     for (const line of configText.split('\n')) {
-        const inline = line.match(/^\s+any-glob-to-(?:any|all)-files?:\s+(\S.*)$/);
+        const inline = line.match(/^\s+(?:-\s+)?any-glob-to-(?:any|all)-files?:\s+(\S.*)$/);
         if (inline) {
             globs.push(unquote(inline[1]));
             continue;
