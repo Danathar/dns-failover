@@ -68,6 +68,26 @@ test('signature must be its own line and name an agent', () => {
     assert.equal(findSignature(`a\r\n${SIG}\r\n`), SIG);
 });
 
+test('the current -- hive: spelling counts like the em dash one; near misses do not', () => {
+    const current = '-- hive: agent=scanner backend=claude model=claude-sonnet-5-5 effort=high claude=2.1.327';
+    assert.equal(findSignature(`Summary\n\n${current}\n`), current);
+    assert.equal(findSignature(`a\r\n${current}\r\n`), current);
+    assert.equal(findSignature(`text ${current}`), null);
+    assert.equal(findSignature('-- hive:'), null);
+    assert.equal(findSignature('-- hive: backend=claude'), null);
+    assert.equal(findSignature('--- hive: agent=x'), null);
+    assert.equal(findSignature('--hive: agent=x'), null);
+    assert.equal(findSignature('\u2013 hive: agent=x'), null);
+    assert.equal(findSignature('```\n' + current + '\n```'), null);
+    const human = pr({ author: { login: 'Danathar', is_bot: false }, body: `Closes #1\n\n${current}` });
+    assert.deepEqual(classify(human), { agent: true, reason: 'signature' });
+    const hive = pr({ body: pr().body.replace(SIG, current) });
+    assert.ok(hive.body.includes(current));
+    assert.deepEqual(auditPr(hive), []);
+    const quoted = pr({ body: pr().body.replace(SIG, `quoting ${current}`) });
+    assert.deepEqual(auditPr(quoted), ['signature']);
+});
+
 test('a signature inside a fenced code block is an example, not a signature', () => {
     assert.equal(findSignature(`Example:\n\`\`\`\n${SIG}\n\`\`\`\n`), null);
     assert.equal(findSignature(`~~~\n${SIG}\n~~~\n${SIG}`), SIG);

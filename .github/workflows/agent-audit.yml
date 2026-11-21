@@ -4,7 +4,8 @@ name: Agent audit trail
 # scripts/ai-audit-report.mjs (tests: scripts/tests/ai-audit-report.test.mjs).
 #
 # Agent PRs here are opened by the Hive GitHub App (`app/danathar-atomic-hive`)
-# and end with a signature line `— hive: agent=<name> ...`. For each one the
+# and end with a signature line `-- hive: agent=<name> ...` (`— hive:`, with an
+# em dash, before 2026-11-18; both count). For each one the
 # script checks: a linked issue (GitHub's resolved closingIssuesReferences, not body text), the signature line,
 # a merger that is a human or the Hive App itself (the hive-serialized lane, reported separately; any other bot or an unknown merger is a violation), and base `main` of
 # Danathar/dns-failover. The result goes to the run summary.

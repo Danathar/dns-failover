@@ -44,12 +44,13 @@ The marks a change carries, and where to read them:
     --jq '[.closingIssuesReferences[].number]'
   ```
 
-- **Hive signature.** Hive PRs end with a line like `— hive: agent=<name>` and
-  are opened by `app/danathar-atomic-hive`:
+- **Hive signature.** Hive PRs end with a line like `-- hive: agent=<name>`
+  (`— hive:`, with an em dash, on PRs from before 2026-11-18) and are opened by
+  `app/danathar-atomic-hive`:
 
   ```bash
   gh pr view <N> --repo Danathar/dns-failover --json author,body \
-    --jq '.author.login, (.body | split("\n") | map(select(startswith("— hive: "))))'
+    --jq '.author.login, (.body | split("\n") | map(select(test("^(--|—) hive: "))))'
   ```
 
   A PR the owner opened from a local session carries the owner's login and may

@@ -11,6 +11,8 @@ import { AGENT_LOGINS, findSignature } from '../ai-audit-report.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WORKFLOW = path.resolve(here, '..', '..', '.github', 'workflows', 'agent-signature.yml');
 const SIG = '— hive: agent=scanner backend=claude model=opus';
+// The spelling the hive writes since 2026-11-18 (hive v5.322.0).
+const CURRENT_SIG = '-- hive: agent=scanner backend=claude model=claude-sonnet-5-5 effort=high claude=2.1.327';
 
 function run(body) {
     const out = [];
@@ -24,15 +26,23 @@ test('a body with the signature line passes', () => {
     const r = run(`**Summary:** x\n\nRefs #3\n\n${SIG}\n`);
     assert.equal(r.code, 0);
     assert.equal(r.err, '');
-    assert.equal(r.out, 'The pull request body has a `— hive: agent=...` signature line.\n');
+    assert.equal(r.out, 'The pull request body has a `-- hive: agent=...` signature line.\n');
+});
+
+test('a body with the current -- hive: signature line passes', () => {
+    for (const body of [`**Summary:** x\n\nRefs #3\n\n${CURRENT_SIG}\n`, `x\r\n${CURRENT_SIG}\r\n`, `  ${CURRENT_SIG}  `]) {
+        const r = run(body);
+        assert.equal(r.code, 0, JSON.stringify(body));
+        assert.equal(r.err, '');
+    }
 });
 
 test('a failing body gets the full error text', () => {
     const r = run('nothing here');
     assert.equal(
         r.err,
-        '::error::The pull request body has no `— hive: agent=<name> ...` signature line ' +
-            '(outside code blocks). The weekly agent audit (agent-audit.yml) will flag this ' +
+        '::error::The pull request body has no `-- hive: agent=<name> ...` signature line ' +
+            '(outside code blocks; the older `— hive:` spelling is still accepted). The weekly agent audit (agent-audit.yml) will flag this ' +
             'PR once merged. Edit the PR description to add the line; this check reruns on edit.\n',
     );
     assert.equal(r.out, '');
@@ -61,7 +71,19 @@ test('run as a script it exits 0 with the signature line and 1 without', () => {
 });
 
 test('a body without the line, an empty body and no body fail with an error annotation', () => {
-    for (const body of ['Filed by the scanner agent', '', undefined, '— hive:', 'see — hive: agent=x']) {
+    for (const body of [
+        'Filed by the scanner agent',
+        '',
+        undefined,
+        '— hive:',
+        'see — hive: agent=x',
+        '-- hive:',
+        'see -- hive: agent=x',
+        '-- hive: backend=claude',
+        '--- hive: agent=x',
+        '--hive: agent=x',
+        '\u2013 hive: agent=x',
+    ]) {
         const r = run(body);
         assert.equal(r.code, 1, JSON.stringify(body));
         assert.match(r.err, /^::error::/);
@@ -88,6 +110,13 @@ test('the PR-time check agrees with the audit on every body', () => {
         '— hive: backend=claude agent=x',
         '— hive: agent=',
         '- hive: agent=x',
+        CURRENT_SIG,
+        `x\r\n${CURRENT_SIG}\r\n`,
+        '-- hive: backend=claude agent=x',
+        '-- hive: agent=',
+        '--- hive: agent=x',
+        '\u2013 hive: agent=x',
+        `\`\`\`\n${CURRENT_SIG}\n\`\`\``,
         `~~~\n${SIG}\n~~~`,
         `\`\`\`\n${SIG}\n\`\`\`\n${SIG}`,
         'nothing here',

@@ -44,7 +44,7 @@ each one does is in
 | who | how to recognise it | what it does |
 |---|---|---|
 | The owner (`Danathar`) | commits and PRs under that login | decides scope and merges |
-| Hive agents | PRs and issues from the GitHub App `danathar-atomic-hive` (`gh` prints the author as `app/danathar-atomic-hive`, the REST API as `danathar-atomic-hive[bot]`); the body ends with a line like `— hive: agent=<name>` | pick up issues, open PRs, reply to review |
+| Hive agents | PRs and issues from the GitHub App `danathar-atomic-hive` (`gh` prints the author as `app/danathar-atomic-hive`, the REST API as `danathar-atomic-hive[bot]`); the body ends with a line like `-- hive: agent=<name>` (`— hive:` before 2026-11-18) | pick up issues, open PRs, reply to review |
 | Claude and ai-fix workflows | runs of `claude.yml` and `ai-fix.yml`, started by an `@claude` comment or the `ai-fix-requested` label from the owner or a collaborator | answer a comment, or verify review findings and apply those that hold |
 | Local agents | Claude Code or omp sessions in a clone or worktree on the owner's machine; commits carry the owner's git identity | work one issue (or one named group) on one branch, as the owner directs |
 
@@ -57,7 +57,7 @@ gh pr list --repo Danathar/dns-failover --state all --author app/danathar-atomic
 
 # the signature line on one PR
 gh pr view <N> --repo Danathar/dns-failover --json author,body \
-  --jq '.author.login, (.body | split("\n") | map(select(startswith("— hive: "))))'
+  --jq '.author.login, (.body | split("\n") | map(select(test("^(--|—) hive: "))))'
 ```
 
 A review finding, from a bot or a person, is a claim to verify against the code,

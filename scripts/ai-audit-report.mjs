@@ -12,8 +12,8 @@
  *
  * A PR is agent-authored when its author is the Hive GitHub App
  * (`app/danathar-atomic-hive` in `gh` output, `danathar-atomic-hive[bot]` in
- * REST/webhook output) or its body has a `— hive: agent=<name> ...` signature
- * line. Everything else is counted as non-agent and listed only as a number,
+ * REST/webhook output) or its body has a `-- hive: agent=<name> ...` signature
+ * line (`— hive:`, with an em dash, on PRs from before 2026-11-18; both count). Everything else is counted as non-agent and listed only as a number,
  * so a window with zero agent PRs reads as "nothing was audited", not as a pass.
  *
  * Requirements checked per agent PR (see docs/agent-boundaries.md and AGENTS.md):
@@ -24,7 +24,7 @@
  *                  `No issue: <reason>` also passes, and the Result column
  *                  says which, e.g. "ok (refs #142)" or "ok (no issue stated)".
  *                  Other agent PRs still need the closing reference.
- *   signature      body has a `— hive: agent=...` line
+ *   signature      body has a `-- hive: agent=...` (or older `— hive:`) line
  *   human-merge    merged by a human account or by the Hive App itself. This
  *                  repository uses the `hive-serialized` merge strategy: the
  *                  App (`app/danathar-atomic-hive`) merges agent PRs once the
@@ -55,7 +55,11 @@ export const AGENT_LOGINS = [
     'danathar-atomic-hive[bot]',
 ];
 
-const SIGNATURE_LINE = /^— hive:.*(^|\s)agent=\S+/;
+// The hive writes `-- hive:` (two ASCII hyphens) since 2026-11-18 (hive
+// v5.322.0) and wrote `— hive:` (an em dash) before; readers accept both, as
+// upstream hive's own LegacyAttributionTrailerPrefix does. No other dash
+// counts.
+const SIGNATURE_LINE = /^(?:--|—) hive:.*(^|\s)agent=\S+/;
 
 function lines(body) {
     return String(body ?? '').split(/\r?\n/);
@@ -94,7 +98,8 @@ function unfencedLines(body) {
 }
 
 /**
- * First `— hive: agent=...` line of the body, or null. Lines inside fenced
+ * First `-- hive: agent=...` (or older `— hive: agent=...`) line of the body,
+ * or null. Lines inside fenced
  * code blocks are examples, not a signature, and are skipped.
  */
 export function findSignature(body) {
@@ -252,7 +257,7 @@ export function renderMarkdown(report) {
     );
     if (report.agent === 0) {
         out.push(
-            '**No agent-authored PRs were found, so nothing was audited.** This is not a pass of the audit-trail rules; check the window and the classification (author `app/danathar-atomic-hive` or a `— hive: agent=...` body line).',
+            '**No agent-authored PRs were found, so nothing was audited.** This is not a pass of the audit-trail rules; check the window and the classification (author `app/danathar-atomic-hive` or a `-- hive: agent=...` body line; the older `— hive:` also counts).',
             ''
         );
         return out.join('\n');
