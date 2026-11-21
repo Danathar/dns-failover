@@ -2,7 +2,8 @@ name: Agent PR signature
 
 # Checks, while an agent pull request is still open, the signature requirement
 # that `agent-audit.yml` checks only after merge: the PR body must have a
-# `— hive: agent=<name> ...` line. A merged PR's body is out of reach, so a
+# `-- hive: agent=<name> ...` line (`— hive:`, with an em dash, on PRs from
+# before 2026-11-18; both count). A merged PR's body is out of reach, so a
 # finding in the weekly audit cannot be repaired; this check catches it while
 # the description can still be edited (it reruns on `edited`).
 #

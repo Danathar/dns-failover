@@ -3,8 +3,8 @@
  * Pull-request-time half of the agent audit's `signature` requirement.
  *
  * `scripts/ai-audit-report.mjs` reads merged pull requests weekly and flags an
- * agent PR whose body has no `— hive: agent=...` line; by then the body can no
- * longer be fixed. `.github/workflows/agent-signature.yml` runs this script on
+ * agent PR whose body has no `-- hive: agent=...` line (the older
+ * `— hive: agent=...` also counts); by then the body can no longer be fixed. `.github/workflows/agent-signature.yml` runs this script on
  * an open agent PR instead, so the line can be added before merge.
  *
  * It uses the audit's own `findSignature`, so the two checks cannot disagree
@@ -25,12 +25,12 @@ import { findSignature } from './ai-audit-report.mjs';
  */
 export function main(env = process.env, stdout = process.stdout, stderr = process.stderr) {
     if (findSignature(env.PR_BODY)) {
-        stdout.write('The pull request body has a `— hive: agent=...` signature line.\n');
+        stdout.write('The pull request body has a `-- hive: agent=...` signature line.\n');
         return 0;
     }
     stderr.write(
-        '::error::The pull request body has no `— hive: agent=<name> ...` signature line ' +
-            '(outside code blocks). The weekly agent audit (agent-audit.yml) will flag this ' +
+        '::error::The pull request body has no `-- hive: agent=<name> ...` signature line ' +
+            '(outside code blocks; the older `— hive:` spelling is still accepted). The weekly agent audit (agent-audit.yml) will flag this ' +
             'PR once merged. Edit the PR description to add the line; this check reruns on edit.\n',
     );
     return 1;
