@@ -200,6 +200,9 @@ const allowed = [
     'git push origin HEAD',
     'git push -u origin acmm/claude-guard',
     'git -C ../wt push origin main',
+    // --attr-source's separated value is stepped over, not read as the subcommand
+    'git --attr-source HEAD log -p',
+    'git --attr-source=HEAD diff --stat',
     'git fetch upstream',
     'git remote set-url --push upstream DISABLE',
     'git status && git diff --stat',
@@ -486,6 +489,16 @@ const blocked = [
     ['git -C . --git-dir=evil show', '--git-dir'],
     ['git --namespace x --git-dir=evil show', '--git-dir'],
     ['git --config-env user.name=V --git-dir=evil show', '--git-dir'],
+    ['git --attr-source HEAD --git-dir=evil log -p', '--git-dir'],
+    ['git --attr-source HEAD -c safe.bareRepository=all log -p', 'safe.bareRepository'],
+    ['git --attr-source HEAD push --force origin main', 'force'],
+    // --shallow-file reads the file it names and takes the next word as its
+    // value, so it is refused outright
+    ['git --shallow-file .env log -1', 'shallow-file'],
+    ['git --shallow-file=.env log -1', 'shallow-file'],
+    ['git --shallow-file HEAD --git-dir=evil log -p', 'shallow-file'],
+    ['git --shallow-file x -c safe.bareRepository=all log -p', 'shallow-file'],
+    ['git -C . --shallow-file x push --force origin main', 'shallow-file'],
     ['git --work-tree=/etc diff --stat', 'Run git from the project without it'],
     ['GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.external GIT_CONFIG_VALUE_0=./x.sh git diff', 'GIT_CONFIG_COUNT'],
     ['gh pr create', 'no --repo'],

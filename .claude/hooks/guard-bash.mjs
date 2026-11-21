@@ -41,7 +41,8 @@
 //   - git config / git remote changes that re-point `origin` or push URLs.
 //   - git options that write a file, read outside the repository or run a
 //     program on the pre-approved read commands: --output[=FILE], --no-index,
-//     --ext-diff, git grep -O/--open-files-in-pager, --exec-path=DIR, and
+//     --ext-diff, git grep -O/--open-files-in-pager, --exec-path=DIR,
+//     --shallow-file (reads a file the index need not hold), and
 //     `-c` keys such as diff.external, core.pager, alias.*, protocol.*
 //     (protocol.ext.allow=always); --upload-pack (and its abbreviations such
 //     as --upl), --exec and clone/ls-remote -u on git
@@ -517,7 +518,16 @@ function checkGit(args, inlineEnv = {}, exported = {}) {
                     'whose config can make git run a program. Run git from the project without it.'
             );
         }
-        i += ['-C', '-c', '--namespace', '--config-env'].includes(a) ? 2 : 1;
+        // `git --shallow-file FILE` reads FILE, a path the index need not hold,
+        // and prints its first line when it is not a list of commits
+        // (`--shallow-file .env`). Ordinary work never needs it.
+        if (a === '--shallow-file' || a.startsWith('--shallow-file=')) {
+            return block('Blocked: `git --shallow-file FILE` makes git read FILE and can print its first line.');
+        }
+        // --attr-source also takes its value as the next word. Reading that
+        // value as the subcommand would end the walk before a later --git-dir,
+        // -c safe.* or `push --force` is seen.
+        i += ['-C', '-c', '--namespace', '--config-env', '--attr-source'].includes(a) ? 2 : 1;
     }
     const sub = args[i];
     const rest = args.slice(i + 1);
