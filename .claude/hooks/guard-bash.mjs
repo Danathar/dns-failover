@@ -49,6 +49,10 @@
 //     fetch|pull|clone|ls-remote|archive, which run the named program;
 //     GIT_* / PAGER / EDITOR variables (inline or exported) other than
 //     identity and no-op pagers (GIT_EXTERNAL_DIFF=, GIT_TRACE=FILE, GIT_DIR=, ...).
+//   - an assignment to HOME, XDG_CONFIG_HOME or PATH (or `NAME+=`): in front
+//     of any command, through `env NAME=value`, as a statement of its own,
+//     or as an operand of export/declare/typeset/local/readonly. The first
+//     two choose the global git config file, PATH chooses which git runs.
 //   - git, node, python/pytest, curl/wget, systemctl/service/tailscale or a
 //     shell run through xargs: xargs appends words read at run time
 //     (`printf '%s\n' --output=FILE | xargs git log`), so none of the
@@ -477,6 +481,24 @@ function blockSettingsEnvOverwrite(what) {
     return block(
         `Blocked: \`${what}\` overwrites the GIT_CONFIG_* settings env in .claude/settings.json that stops a ` +
             'committed repository folder from running a program; the variable stays exported, so git reads the new value. Leave it set.'
+    );
+}
+
+// HOME and XDG_CONFIG_HOME pick the folder git reads its global config from
+// (`$HOME/.gitconfig`, `$XDG_CONFIG_HOME/git/config`), and the GIT_CONFIG_*
+// settings env replaces neither file: `HOME=planted git diff` runs a
+// diff.external that a branch committed in planted/.gitconfig. PATH picks the
+// file named git that the shell runs: `PATH=planted:$PATH git log` runs a
+// planted/git. All three are always exported, so a statement of its own
+// (`HOME=planted; git log -p`) reaches every later command too. A key `NAME+`
+// is the `NAME+=value` append form.
+const CONFIG_REACH_ENV = /^(HOME|XDG_CONFIG_HOME|PATH)\+?$/;
+
+function blockConfigReach(what) {
+    return block(
+        `Blocked: \`${what}\` changes where git reads its global config (HOME, XDG_CONFIG_HOME) or which ` +
+            'program runs as git (PATH), so a folder a branch committed can make git run a program. ' +
+            'Run commands with the HOME and PATH you already have.'
     );
 }
 
@@ -1713,6 +1735,9 @@ function checkSegment(words, state) {
             // Only assignments: they set shell variables, and an exported one keeps its export.
             const name = Object.keys(inlineEnv).find((k) => k.includes('GIT_CONFIG'));
             if (name !== undefined) return blockSettingsEnvOverwrite(`${name}=${inlineEnv[name]}`);
+            // `HOME=planted;` / `PATH=planted:$PATH;` reach every later git.
+            const reach = Object.keys(inlineEnv).find((k) => CONFIG_REACH_ENV.test(k));
+            if (reach !== undefined) return blockConfigReach(`${reach}=${inlineEnv[reach]}`);
             return null;
         }
         // A command name the shell builds into a checked one (#124). Braces are
@@ -1839,6 +1864,12 @@ function checkSegment(words, state) {
 
     const cmd = basename(w[0]);
     const args = w.slice(1);
+    // `HOME=planted git diff`, `env PATH=planted:$PATH git log`. Git run with a
+    // cleared environment (`env -i PATH=/usr/bin git`) is refused below for that.
+    const reach = Object.keys(inlineEnv).find((k) => CONFIG_REACH_ENV.test(k));
+    if (reach !== undefined && !(state.envCleared && cmd === 'git')) {
+        return blockConfigReach(`${reach}=${inlineEnv[reach]} ${cmd}`);
+    }
     // `printf '%s\n' --output=FILE | xargs git log`, `printf '%s\n' +n -c CMD | xargs bash -n`
     // and `echo https://api.tailscale.com/... | xargs curl` reach commands with
     // arguments this hook never sees, under the allow rules and checks below.
@@ -1875,6 +1906,8 @@ function checkSegment(words, state) {
             // `export NAME+=value` appends to NAME; it is kept as `NAME+`, which riskyEnv() reads as NAME.
             const eq = a.indexOf('=');
             const name = eq === -1 ? a : a.slice(0, eq);
+            // `export HOME=planted`, `declare -x PATH=planted:$PATH`.
+            if (eq !== -1 && CONFIG_REACH_ENV.test(name)) return blockConfigReach(`${cmd} ${a}`);
             const base = name.endsWith('+') ? name.slice(0, -1) : name;
             if (/^(GIT_CONFIG_|GIT_SSH)/i.test(base) || WATCHED_ENV.test(base) || PYTHON_ENV.test(base)) {
                 (state.exportedEnv ??= {})[name] = eq === -1 ? null : a.slice(eq + 1);
@@ -1886,6 +1919,9 @@ function checkSegment(words, state) {
         // `declare $v=0` sets the name $v holds: refused like `unset $v`.
         const op = args.find((a) => assignedName(a) !== null && removesSettingsEnv(assignedName(a)));
         if (op !== undefined) return blockSettingsEnvOverwrite(`${cmd} ${op}`);
+        // `typeset PATH=planted`, `readonly HOME=planted`.
+        const reachOp = args.find((a) => assignedName(a) !== null && CONFIG_REACH_ENV.test(assignedName(a)));
+        if (reachOp !== undefined) return blockConfigReach(`${cmd} ${reachOp}`);
     }
     if (cmd === 'cd' || cmd === 'pushd') {
         state.cwd = cdTarget(args, state);
