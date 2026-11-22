@@ -427,6 +427,12 @@ const blocked = [
     ['declare -x XDG_CONFIG_HOME=planted; git log -p', 'changes where git reads its global config'],
     ['declare HOME+=/planted; git log -p', 'changes where git reads its global config'],
     ['typeset PATH=planted; git log -1', 'Run commands with the HOME and PATH you already have'],
+    // the refusal names the declaring command and the assignment operand
+    ['typeset PATH=planted; git log -1', '`typeset PATH=planted`'],
+    ['readonly XDG_CONFIG_HOME=planted; git log -p', '`readonly XDG_CONFIG_HOME=planted`'],
+    // a non-git command under `env -i` keeps the refusal: only git is exempt, since git is refused for env -i below
+    ['env -i HOME=planted node --test', '`HOME=planted node`'],
+    ['env -i PATH=/usr/bin node --test', '`PATH=/usr/bin node`'],
     ['local HOME=planted; git log -p', 'changes where git reads its global config'],
     ['readonly HOME=planted; git log -p', 'changes where git reads its global config'],
     ['env -i timeout 5 git show', 'env -i'],
