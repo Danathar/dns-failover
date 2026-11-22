@@ -313,6 +313,8 @@ const allowed = [
     'printf -v FOO 0',
     'read FOO',
     'for x in HOME; do echo $x; done',
+    // HOME or PATH as an operand of any other command is only a word
+    'grep PATH README.md',
 ];
 
 const blocked = [
@@ -451,6 +453,9 @@ const blocked = [
     // a subscript assigns the variable itself
     ['PATH[0]=planted; git log -1', '`PATH[0]=planted`'],
     ['HOME[0]+=/planted; git log -p', 'changes where git reads its global config'],
+    // a subscript of more than one character still names element 0 (`[00]`, `[1-1]`)
+    ['PATH[00]=planted; git log -1', '`PATH[00]=planted`'],
+    ['HOME[1-1]=planted git log -p', 'changes where git reads its global config'],
     ['env -i timeout 5 git show', 'env -i'],
     ["env -i bash -c 'git show'", 'env -i'],
     ["env -iS'git show'", 'env -i'],

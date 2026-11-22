@@ -1972,7 +1972,8 @@ function checkSegment(words, state) {
     if ((cmd === 'for' || cmd === 'select') && removesSettingsEnv(args[0] ?? '')) {
         return blockSettingsEnvOverwrite(`${cmd} ${args[0]}`);
     }
-    if ((cmd === 'for' || cmd === 'select') && CONFIG_REACH_ENV.test(args[0] ?? '')) {
+    // A loop with no name tests the text "undefined", which is not one of the names.
+    if ((cmd === 'for' || cmd === 'select') && CONFIG_REACH_ENV.test(args[0])) {
         return blockConfigReach(`${cmd} ${args[0]}`);
     }
     if (cmd === 'let') {
