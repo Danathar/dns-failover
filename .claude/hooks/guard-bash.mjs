@@ -491,8 +491,9 @@ function blockSettingsEnvOverwrite(what) {
 // file named git that the shell runs: `PATH=planted:$PATH git log` runs a
 // planted/git. All three are always exported, so a statement of its own
 // (`HOME=planted; git log -p`) reaches every later command too. A key `NAME+`
-// is the `NAME+=value` append form.
-const CONFIG_REACH_ENV = /^(HOME|XDG_CONFIG_HOME|PATH)\+?$/;
+// is the `NAME+=value` append form, and `NAME[0]` is a subscript: bash reads
+// `PATH[0]=planted` as assigning PATH itself, which stays exported.
+const CONFIG_REACH_ENV = /^(HOME|XDG_CONFIG_HOME|PATH)(\[[^\]]*\])?\+?$/;
 
 function blockConfigReach(what) {
     return block(
@@ -1731,6 +1732,9 @@ function checkSegment(words, state) {
         }
         // `GIT_CONFIG_COUNT[0]=0` is an assignment too (isAssignment() reads no subscript).
         if (w.length && /^\w*GIT_CONFIG\w*\[[^=]*\]\+?=/.test(w[0])) return blockSettingsEnvOverwrite(w[0]);
+        // `PATH[0]=planted` assigns PATH itself the same way.
+        const subscripted = w.length ? /^([^=]*\[[^=]*\]\+?)=/.exec(w[0]) : null;
+        if (subscripted && CONFIG_REACH_ENV.test(subscripted[1])) return blockConfigReach(w[0]);
         if (!w.length) {
             // Only assignments: they set shell variables, and an exported one keeps its export.
             const name = Object.keys(inlineEnv).find((k) => k.includes('GIT_CONFIG'));
@@ -1951,17 +1955,25 @@ function checkSegment(words, state) {
     // unset; a `printf -v` with no name is refused too. Every operand of read
     // and mapfile is read as a name, so an option value that is not a plain
     // word (`read -p 'Name: ' x`) is refused as well. A `let` expression is
-    // refused when it contains GIT_CONFIG or a `$` (`let $v=0`).
+    // refused when it contains GIT_CONFIG or a `$` (`let $v=0`). The same
+    // builtins assigning HOME, XDG_CONFIG_HOME or PATH (`read HOME <<< planted`)
+    // are refused as for `HOME=planted;`.
     if (cmd === 'printf' && args.length && args[0].startsWith('-v')) {
         const name = args[0] === '-v' ? args[1] : args[0].slice(2);
         if (name === undefined || removesSettingsEnv(name)) return blockSettingsEnvOverwrite(`printf -v ${name ?? ''}`);
+        if (CONFIG_REACH_ENV.test(name)) return blockConfigReach(`printf -v ${name}`);
     }
     if (cmd === 'read' || cmd === 'mapfile' || cmd === 'readarray') {
         const name = args.find(removesSettingsEnv);
         if (name !== undefined) return blockSettingsEnvOverwrite(`${cmd} ${name}`);
+        const reach = args.find((a) => CONFIG_REACH_ENV.test(a));
+        if (reach !== undefined) return blockConfigReach(`${cmd} ${reach}`);
     }
     if ((cmd === 'for' || cmd === 'select') && removesSettingsEnv(args[0] ?? '')) {
         return blockSettingsEnvOverwrite(`${cmd} ${args[0]}`);
+    }
+    if ((cmd === 'for' || cmd === 'select') && CONFIG_REACH_ENV.test(args[0] ?? '')) {
+        return blockConfigReach(`${cmd} ${args[0]}`);
     }
     if (cmd === 'let') {
         const expr = args.find((a) => a.includes('GIT_CONFIG') || a.includes('$'));

@@ -309,6 +309,10 @@ const allowed = [
     'MANPATH=/usr/share/man git log -1',
     'HOMEBREW_NO_ANALYTICS=1 git log -1',
     "git log -p -S 'PATH=' -- docs",
+    // printf -v, read and for assigning another name, or HOME only as a loop value
+    'printf -v FOO 0',
+    'read FOO',
+    'for x in HOME; do echo $x; done',
 ];
 
 const blocked = [
@@ -435,6 +439,18 @@ const blocked = [
     ['env -i PATH=/usr/bin node --test', '`PATH=/usr/bin node`'],
     ['local HOME=planted; git log -p', 'changes where git reads its global config'],
     ['readonly HOME=planted; git log -p', 'changes where git reads its global config'],
+    // printf -v, read and for assign a name as a statement, and it stays exported
+    ['for HOME in planted; do git log -p; done', '`for HOME`'],
+    ['select XDG_CONFIG_HOME in planted; do git log -p; done', '`select XDG_CONFIG_HOME`'],
+    ['read HOME <<< planted; git log -p', '`read HOME`'],
+    ['mapfile PATH < planted; git log -1', '`mapfile PATH`'],
+    ['readarray -t XDG_CONFIG_HOME < planted; git log -p', '`readarray XDG_CONFIG_HOME`'],
+    ['printf -v HOME planted; git log -p', '`printf -v HOME`'],
+    ['printf -vXDG_CONFIG_HOME planted; git log -p', '`printf -v XDG_CONFIG_HOME`'],
+    ['printf -v PATH planted; git log -1', 'which program runs as git (PATH)'],
+    // a subscript assigns the variable itself
+    ['PATH[0]=planted; git log -1', '`PATH[0]=planted`'],
+    ['HOME[0]+=/planted; git log -p', 'changes where git reads its global config'],
     ['env -i timeout 5 git show', 'env -i'],
     ["env -i bash -c 'git show'", 'env -i'],
     ["env -iS'git show'", 'env -i'],
