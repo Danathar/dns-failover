@@ -21,7 +21,7 @@ const SECURITY = 'docs/security/SECURITY-AI.md';
 const config = JSON.parse(read('risk-config.json'));
 
 // Tier 1 and Tier 2 paths that are the product, its configuration or the
-// licence: owner-reviewed because of what they can break on the DNS host, not
+// licence: in those tiers because of what they can break on the DNS host, not
 // because they bound what an agent may do.
 const NOT_BOUNDING = new Set([
     'install-dns-failover.sh',

@@ -1,6 +1,10 @@
 {
-    "$comment": "docs/risk-tiers.md is the source; this file restates its tier table as data. scripts/check-policies.mjs fails when the two disagree (tier number, name, paths, required commands, review) and when .github/CODEOWNERS lacks an entry for a path whose review is owner. Tier 1 is the MOST dangerous tier. Paths are input to a classifier, not the classifier: tier is set by what a change can break, so a reviewer's judgment can raise a tier above the path match but never lower it below. A path glob cannot see inside a file, so a change to the safety-relevant parts of a Tier 2 or Tier 3 file (see docs/risk-tiers.md, 'Raise the tier') is raised by that rule. The `**/` prefix matches a file at any depth, including the repository root.",
+    "$comment": "docs/risk-tiers.md is the source; this file restates its tier table as data. scripts/check-policies.mjs fails when the two disagree (tier number, name, paths, required commands, review) and when .github/CODEOWNERS does not list exactly owner_merge_paths with the owner. Tiers are risk labels: they set the required commands, not who reviews. Every tier merges on the required checks plus the hive's AI reviewer (review: ci). Owner review is required only for owner_merge_paths, which must match the hive's auto_merge.human_merge_paths for this repository (the hive holds those pull requests with the needs-owner-merge label for a person to merge). Tier 1 is the MOST dangerous tier. Paths are input to a classifier, not the classifier: tier is set by what a change can break, so a reviewer's judgment can raise a tier above the path match but never lower it below. A path glob cannot see inside a file, so a change to the safety-relevant parts of a Tier 2 or Tier 3 file (see docs/risk-tiers.md, 'Raise the tier') is raised by that rule. The `**/` prefix matches a file at any depth, including the repository root.",
     "owner": "@Danathar",
+    "owner_merge_paths": [
+        ".github/rulesets/**",
+        ".github/CODEOWNERS"
+    ],
     "default_tier": 3,
     "tiers": [
         {
@@ -34,7 +38,7 @@
                 "node --test 'scripts/tests/*.test.mjs'",
                 "node --test '.claude/hooks/tests/*.test.mjs'"
             ],
-            "review": "owner"
+            "review": "ci"
         },
         {
             "tier": 2,
@@ -65,7 +69,7 @@
                 "git ls-files '*.sh' | xargs shellcheck",
                 "node scripts/check-policies.mjs"
             ],
-            "review": "owner"
+            "review": "ci"
         },
         {
             "tier": 3,

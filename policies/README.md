@@ -8,8 +8,8 @@ runs it on every pull request and push to `main`. Tests are in
 (`node --test scripts/tests/check-policies.test.mjs`); each policy has a test
 that the real tree passes and tests that a mutated copy fails.
 
-Changing a policy is a Tier 1 change in [docs/risk-tiers.md](../docs/risk-tiers.md)
-and needs the owner. Why these policies exist, and what the script itself does
+Changing a policy is a Tier 1 change in [docs/risk-tiers.md](../docs/risk-tiers.md):
+an agent makes one only when the owner asked for it. Why these policies exist, and what the script itself does
 and does not defend against, is in
 [docs/security/SECURITY-AI.md](../docs/security/SECURITY-AI.md).
 
@@ -163,10 +163,15 @@ Not JSON policy files. The checker compares the tier table in
 [docs/risk-tiers.md](../docs/risk-tiers.md) with
 [`risk-config.json`](../risk-config.json) and fails when tier numbers, names,
 paths, required commands or review values differ (a literal `|` in a command is
-written `\|` in the table). It also fails when a path in a tier whose review is
-`owner` has no entry for `owner` in [`.github/CODEOWNERS`](../.github/CODEOWNERS),
-or when CODEOWNERS has a catch-all `*` entry. `**/x` in the config is `x` in
-CODEOWNERS, `dir/**` is `/dir/`, anything else is `/path`.
+written `\|` in the table). It also fails when
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) does not list exactly the
+`owner_merge_paths` in `risk-config.json` (`.github/rulesets/**` and
+`.github/CODEOWNERS`) with `owner`: an owner-merge path with no such entry, any
+other entry (a catch-all `*` included), or a later entry that takes an
+owner-merge file off the owner. `owner_merge_paths` must match the hive's
+`auto_merge.human_merge_paths` for this repository, which is what holds those
+pull requests (label `needs-owner-merge`) for a person to merge. `**/x` in the
+config is `x` in CODEOWNERS, `dir/**` is `/dir/`, anything else is `/path`.
 `node scripts/check-policies.mjs --classify <path>...` prints the tier of a
 path. It cannot see inside a file, so it does not apply the "Raise the tier"
 rules.
@@ -181,6 +186,6 @@ a default flipped to `auto_restore` true, a committed token or profile ID. It
 is not a shell, Python or YAML parser and does not defend against deliberately
 obfuscated commands (variables built at runtime, `eval`, generated scripts,
 aliases, a secret split across strings). The hard boundaries are the
-repository-scoped `GITHUB_TOKEN`, the required status checks and the owner's
-merge. CODEOWNERS only requests the owner's review unless the ruleset requires
-it.
+repository-scoped `GITHUB_TOKEN`, the required status checks, the hive's
+reviewer, and the owner's merge of the owner-merge paths. CODEOWNERS only
+requests the owner's review: the ruleset does not require it.

@@ -4,6 +4,15 @@ How to classify a change to this repository, and what each tier requires before
 it merges. Reviewers and agents use it. [Agent boundaries](agent-boundaries.md)
 maps the tiers to what an agent may change without the owner.
 
+**Who reviews is not set by the tier.** By the owner's decision of 2026-11-23,
+every change merges on the required checks plus the hive's AI reviewer, with
+no owner review, except a change to `.github/rulesets/**` or
+`.github/CODEOWNERS`. The hive holds a pull request touching either of those
+with the `needs-owner-merge` label until a person merges it (its
+`auto_merge.human_merge_paths` gate). The tiers below are risk labels: they
+set the commands to run, how closely the reviewer reads, and which edits the
+Claude Code permission table asks about first (`.claude/settings.json`).
+
 The tier is set by **what the change can break**, not by diff size. This
 repository is root-run Python and POSIX shell that rewrites `/etc/dnsmasq.conf`,
 sends SIGHUP to dnsmasq every few seconds and, through the Tailscale API,
@@ -13,9 +22,10 @@ to the README is Tier 3.
 
 This file is the source. [`risk-config.json`](../risk-config.json) restates the
 table below as data, and `node scripts/check-policies.mjs` fails when the two
-disagree. To change a tier, edit both in the same pull request, and keep
-[`.github/CODEOWNERS`](../.github/CODEOWNERS) in step: the checker also fails
-when a path whose review is `owner` has no CODEOWNERS entry.
+disagree. To change a tier, edit both in the same pull request. The checker
+also fails when [`.github/CODEOWNERS`](../.github/CODEOWNERS) does not list
+exactly the `owner_merge_paths` in `risk-config.json` with the owner; that list
+must match the hive's `human_merge_paths` for this repository.
 
 ## Tier table
 
@@ -24,16 +34,18 @@ repository root), `*` matches within one directory level.
 
 | Tier | Name | Covers | Required commands | Review |
 | ---- | ---- | ------ | ----------------- | ------ |
-| 1 | critical | `.github/workflows/**`, `.github/CODEOWNERS`, `.github/rulesets/**`, `.claude/settings.json`, `.claude/hooks/**`, `policies/**`, `scripts/check-policies.mjs`, `risk-config.json`, `renovate.json`, `LICENSE`, `AGENTS.md`, `install-dns-failover.sh`, `tailscale-dns-failover/install.sh`, `tailscale-dns-failover/configure.py`, `tailscale-dns-failover/monitor.py`, `dns-upstream-check.py` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `tests/e2e/run.sh`, `python3 -m coverage run -m pytest && python3 -m coverage report`, `node scripts/check-policies.mjs`, `node --test 'scripts/tests/*.test.mjs'`, `node --test '.claude/hooks/tests/*.test.mjs'` | `owner` |
-| 2 | high | `dns-upstream-probe.py`, `**/*.service`, `**/*.timer`, `**/dnsmasq-*.conf`, `**/*.conf.example`, `**/stubby-*.yml`, `**/stubby-*.yml.example`, `pyproject.toml`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursor/rules/**`, `.github/prompts/**`, `.claude/skills/**`, `.claude/memory/**`, `.claude/session-summary.md`, `docs/risk-tiers.md`, `docs/agent-boundaries.md`, `docs/security/**` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `node scripts/check-policies.mjs` | `owner` |
+| 1 | critical | `.github/workflows/**`, `.github/CODEOWNERS`, `.github/rulesets/**`, `.claude/settings.json`, `.claude/hooks/**`, `policies/**`, `scripts/check-policies.mjs`, `risk-config.json`, `renovate.json`, `LICENSE`, `AGENTS.md`, `install-dns-failover.sh`, `tailscale-dns-failover/install.sh`, `tailscale-dns-failover/configure.py`, `tailscale-dns-failover/monitor.py`, `dns-upstream-check.py` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `tests/e2e/run.sh`, `python3 -m coverage run -m pytest && python3 -m coverage report`, `node scripts/check-policies.mjs`, `node --test 'scripts/tests/*.test.mjs'`, `node --test '.claude/hooks/tests/*.test.mjs'` | `ci` |
+| 2 | high | `dns-upstream-probe.py`, `**/*.service`, `**/*.timer`, `**/dnsmasq-*.conf`, `**/*.conf.example`, `**/stubby-*.yml`, `**/stubby-*.yml.example`, `pyproject.toml`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursor/rules/**`, `.github/prompts/**`, `.claude/skills/**`, `.claude/memory/**`, `.claude/session-summary.md`, `docs/risk-tiers.md`, `docs/agent-boundaries.md`, `docs/security/**` | `python3 -m pytest`, `ruff check .`, `git ls-files '*.sh' \| xargs shellcheck`, `node scripts/check-policies.mjs` | `ci` |
 | 3 | standard | `tests/**`, `scripts/**`, `docs/**`, `*.md`, `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md`, `.github/labeler.yml`, `.github/auto-qa-tuning.json`, `.editorconfig`, `.shellcheckrc`, `.gitignore` | `python3 -m pytest`, `ruff check .`, `node --test 'scripts/tests/*.test.mjs'` | `ci` |
 
-Review values: `owner` means the repository owner (Danathar) reads the diff and
-merges it, and a green CI run alone is not enough. `ci` means the required CI
-checks must pass: the four jobs in `.github/workflows/ci.yml` (`Lint`,
-`Unit tests (debian 12)`, `Unit tests (debian 13)`, `E2E (debian container)`),
-`Coverage gate`, `policy-check` and `agent-tooling`, and an agent may open and,
-under the Hive merge strategy, queue the pull request.
+Review values: `ci` means the required CI checks must pass: the four jobs in
+`.github/workflows/ci.yml` (`Lint`, `Unit tests (debian 12)`,
+`Unit tests (debian 13)`, `E2E (debian container)`), `Coverage gate`,
+`policy-check` and `agent-tooling`, and the hive's AI reviewer must not block
+it. An agent may open and, under the Hive merge strategy, queue the pull
+request. Every tier is `ci`. The only owner gate is the owner-merge list above
+(`.github/rulesets/**`, `.github/CODEOWNERS`): a pull request touching it waits
+for the owner to merge it, whatever its tier.
 
 ## Raise the tier
 
@@ -110,20 +122,22 @@ tier".
 ## Why these paths
 
 - **`.github/workflows/**`, `.github/rulesets/**`, `.github/CODEOWNERS`.** What
-  runs with repository tokens, what blocks a merge, and who must approve. A
-  workflow that gets write scope or an interpolated issue title is a way into
-  the repository.
+  runs with repository tokens, what blocks a merge, and whose review is
+  requested. A workflow that gets write scope or an interpolated issue title is
+  a way into the repository. The rulesets and CODEOWNERS are also the only
+  paths that still wait for the owner to merge.
 - **`.claude/settings.json`, `.claude/hooks/**`.** The agent permission table and
   the Bash guard: they stop an agent from running the installers, `monitor.py`
   or the checker against the live host, or pushing to the wrong repository.
 - **`policies/**`, `scripts/check-policies.mjs`, `risk-config.json`, `AGENTS.md`.**
-  The rules that bound agents and the checker that enforces them. They are
-  changed by the owner, never by the agent they constrain.
+  The rules that bound agents and the checker that enforces them. An agent
+  changes them only when the owner asked for it, never as part of unrelated
+  work.
 - **`renovate.json`.** Decides which dependency updates Renovate proposes and
   which of them wait for the owner. Its rule for `.github/workflows/**` keeps
   Tier 1 workflow updates behind owner approval on the Dependency Dashboard,
   because the merge lane merges any green PR. Loosening it lets workflow
-  changes reach `main` unreviewed.
+  updates reach `main` with no person choosing them.
 - **`LICENSE`.** GPL-3.0-or-later text; changing it changes what users may do
   with the code.
 - **The root-run scripts** (`install-dns-failover.sh`,
@@ -140,9 +154,9 @@ tier".
   CLAUDE.md and AGENTS.md have every session read it first, and it repeats the
   host rule.
 - **`docs/security/**`, `docs/agent-boundaries.md`, this file.** The written
-  boundary agents are judged by. They are Tier 2 so an agent cannot change
-  them under the `ci` gate, even though ordinary `docs/**` is Tier 3. Edit
-  them together with the policy files they describe.
+  boundary agents are judged by. They are Tier 2, so the reviewer reads them
+  as boundary changes even though ordinary `docs/**` is Tier 3. Edit them
+  together with the policy files they describe.
 - **`tests/**`, `scripts/**`.** They can hide a regression but do not ship to the
   host. `scripts/check-policies.mjs` is the exception and is Tier 1.
 

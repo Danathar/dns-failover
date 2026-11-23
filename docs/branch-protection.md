@@ -11,12 +11,11 @@ GitHub is really enforcing it. Every command here targets
 ## Status
 
 The ruleset in [`.github/rulesets/main.json`](../.github/rulesets/main.json) is
-**active**. It was applied on 2026-10-12 as ruleset `24900573`. The file now
-also requires code owner review (issue #90). That part takes effect only once
-the owner PUTs the file to the live ruleset (see "Applying or changing the
-ruleset"); until then the diff below prints the one difference,
-`require_code_owner_review`. Check it yourself; neither call needs admin
-rights:
+**active**. It was applied on 2026-10-12 as ruleset `24900573`. Code owner
+review, added in issue #90, was turned off again by the owner's decision of
+2026-11-23: the live ruleset has `require_code_owner_review: false` and so does
+the file, so the diff below prints nothing. Check it yourself; neither call
+needs admin rights:
 
 ```bash
 gh api repos/Danathar/dns-failover/branches/main --jq .protected
@@ -73,28 +72,27 @@ import format, so it applies as-is.
 - **No bypass actors.** A bypass for Actions or for an App hands back the
   direct push this exists to stop.
 - **`deletion` and `non_fast_forward`** stop `main` being deleted or rewritten.
-- **`pull_request` with 0 approvals, and code owner review required.**
+- **`pull_request` with 0 approvals, and no code owner review.**
   GitHub does not let anyone approve their own pull request, so on a
   single-maintainer repository one required approval for *every* pull request
   would mean the owner's own pull requests could never merge. 0 approvals
   still makes every change arrive as a pull request that passed the required
-  checks. Code owner review is what puts the owner in the loop where it
-  matters: [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists only the Tier 1
-  and Tier 2 paths ([risk-tiers.md](risk-tiers.md)), so a pull request that
-  touches one of them cannot merge, by anyone or any token, until the owner
-  approves it on GitHub. That approval is then on record. A Tier 3 pull
-  request touches no listed path and merges on the required checks alone.
-  CODEOWNERS has no catch-all `*` line for that reason, and
-  `scripts/check-policies.mjs` fails if one comes back.
+  checks. By the owner's decision of 2026-11-23, `require_code_owner_review`
+  is `false`: ordinary changes, whatever their tier in
+  [risk-tiers.md](risk-tiers.md), merge on the required checks plus the hive's
+  AI reviewer, with no owner review.
 
-  The cost: the owner is the only code owner, and cannot approve their own
-  pull request, so a pull request the owner opens that touches a Tier 1 or
-  Tier 2 path cannot merge either. Either have an agent open it and approve
-  that, or add a bypass for the admin role in `pull_request` mode
-  (`{"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode":
-  "pull_request"}` in `bypass_actors`). That bypass lets an admin merge a
-  pull request past *all* of its rules, required checks included, so it is
-  not in the file by default.
+  The owner stays in the loop for two paths only, `.github/rulesets/**` and
+  `.github/CODEOWNERS`. GitHub does not enforce that; the hive does. Its
+  `auto_merge.human_merge_paths` setting for this repository lists those two
+  paths, and the hive labels a pull request touching either
+  `needs-owner-merge` and leaves it for a person to merge.
+  [`.github/CODEOWNERS`](../.github/CODEOWNERS) lists the same two paths
+  (recorded as `owner_merge_paths` in `risk-config.json`), so GitHub requests
+  the owner's review on them; `scripts/check-policies.mjs` fails when
+  CODEOWNERS lists anything else, a catch-all `*` included, or drops one.
+  A token other than the hive's (a workflow, a person's own token) is not
+  held by that gate.
 - **Seven required checks**, all GitHub Actions (`integration_id` 15368):
   - `Lint`, `Unit tests (debian 12)`, `Unit tests (debian 13)` and
     `E2E (debian container)`: the jobs in
@@ -183,6 +181,7 @@ up-to-date rule requires anyway.
 
 ## When there is a second reviewer
 
-Add them to the Tier 1 and Tier 2 entries in CODEOWNERS, so either can approve
-the other's pull requests. Then consider `required_approving_review_count` 1,
-and `require_last_push_approval`, so a push after approval needs a fresh one.
+Add them to the two CODEOWNERS entries, so GitHub requests either one's
+review on the owner-merge paths. Then consider `require_code_owner_review`,
+`required_approving_review_count` 1, and `require_last_push_approval`, so a
+push after approval needs a fresh one.
