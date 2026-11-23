@@ -294,6 +294,10 @@ const allowed = [
     "env -a '-Sgit push --force' git status",
     'nice --adj 5 shellcheck monitor.py',
     'env -iu X python3 -m pytest',
+    // env -u's value is a variable name, not the command: read as one, `git` or
+    // `sudo` here would be the command, with the real one as its argument.
+    'env -u git git status',
+    'env -u sudo git status',
     // a case statement inside a substitution: its pattern's `)` does not end it
     'echo "$(case a in a) echo hi;; esac) done"',
     'x=$(case a in (a) echo hi;; b|c) echo no;& d) echo x;;& esac); echo "$x"',
@@ -401,6 +405,10 @@ const blocked = [
     ["env -i bash -c 'git show'", 'env -i'],
     ["env -iS'git show'", 'env -i'],
     ['env -S "-i git log"', 'env -i'],
+    // --split-string takes its string as a separate word even when that string starts
+    // with a dash, so the string is read as env options and a command, not as flags
+    ['env --split-string "-i git log"', 'env -i'],
+    ['env --split-string \'-i git log\'', 'env -i'],
     ['env -S "-u GIT_CONFIG_COUNT git log"', 'GIT_CONFIG_COUNT'],
     // the words after an env -S string are part of the command it runs
     ['env -S env -i git log', 'env -i'],
