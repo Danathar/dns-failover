@@ -1069,7 +1069,7 @@ test('codeowners: a dropped entry, a wrong owner, an extra entry and a catch-all
 });
 
 test('codeowners: owner_merge_paths must be a non-empty list of globs', () => {
-    for (const bad of [undefined, [], [''], 'x', [1]]) {
+    for (const bad of [undefined, [], [''], 'x', [1], ['.github/CODEOWNERS', ''], ['.github/CODEOWNERS', 1]]) {
         const config = { ...JSON.parse(RISK), owner_merge_paths: bad };
         assert.deepEqual(checkCodeowners(config, CODEOWNERS, '@Danathar'), ['risk-config.json: "owner_merge_paths" must be a non-empty array of path globs'], String(bad));
     }

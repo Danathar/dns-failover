@@ -394,7 +394,7 @@ export function checkCodeowners(config, text, owner, files = []) {
     }
     for (const g of globs) {
         const want = codeownersPattern(g);
-        if (!(entries.get(want) ?? []).includes(owner)) {
+        if (!entries.get(want)?.includes(owner)) {
             v.push(`.github/CODEOWNERS: owner-merge path "${g}" needs an entry "${want} ${owner}"`);
         }
     }
