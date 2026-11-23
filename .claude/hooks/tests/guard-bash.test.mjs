@@ -16,7 +16,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { closeParen } from '../shell-reader.mjs';
+import { closeParen, wrapperTarget } from '../shell-reader.mjs';
 
 const HOOK = fileURLToPath(new URL('../guard-bash.mjs', import.meta.url));
 
@@ -1658,6 +1658,15 @@ test('an internal error fails closed (exit 2), not open', () => {
     const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { input, encoding: 'utf8' });
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /internal error \(boom\); blocking \(fail closed\)/);
+});
+
+// wrapperTarget() finds the word a wrapper runs by stepping over the value of
+// each option that takes one. The string env -S and --split-string take is read
+// again by other scans, so a row run through the hook cannot tell a missing
+// table entry from a present one; check the index directly.
+test('wrapperTarget steps over the value word of env -S and --split-string', () => {
+    assert.equal(wrapperTarget(['env', '-S', 'a b', 'c']), 3);
+    assert.equal(wrapperTarget(['env', '--split-string', 'a b', 'c']), 3);
 });
 
 // closeParen() decides where a `$(...)`, `<(...)` or `>(...)` body ends. Run
