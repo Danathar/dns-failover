@@ -32,3 +32,13 @@ test('the guard reads commands through the shared reader', () => {
     const guard = readFileSync(`${ROOT}.claude/hooks/guard-bash.mjs`, 'utf8');
     assert.match(guard, /from '\.\/shell-reader\.mjs';/);
 });
+
+// env's value options hide the command word from the wrapper walk: without
+// them `env -S 'git log -p'` or `env -u NAME git log -p` would read the value
+// as the command. Other scans can still catch some spellings, so pin the list.
+test('env treats -u, -S and --split-string as taking a separate value word', async () => {
+    const { WRAPPER_VALUE_OPTS } = await import('../shell-reader.mjs');
+    for (const opt of ['-u', '--unset', '-S', '--split-string']) {
+        assert.ok(WRAPPER_VALUE_OPTS.env.includes(opt), `env ${opt} must take a value word`);
+    }
+});
