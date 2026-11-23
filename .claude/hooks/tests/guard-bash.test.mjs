@@ -16,7 +16,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { closeParen } from '../shell-reader.mjs';
+import { closeParen, wrapperTarget } from '../shell-reader.mjs';
 
 const HOOK = fileURLToPath(new URL('../guard-bash.mjs', import.meta.url));
 
@@ -294,6 +294,10 @@ const allowed = [
     "env -a '-Sgit push --force' git status",
     'nice --adj 5 shellcheck monitor.py',
     'env -iu X python3 -m pytest',
+    // env -u's value is a variable name, not the command: read as one, `git` or
+    // `sudo` here would be the command, with the real one as its argument.
+    'env -u git git status',
+    'env -u sudo git status',
     // a case statement inside a substitution: its pattern's `)` does not end it
     'echo "$(case a in a) echo hi;; esac) done"',
     'x=$(case a in (a) echo hi;; b|c) echo no;& d) echo x;;& esac); echo "$x"',
@@ -460,6 +464,10 @@ const blocked = [
     ["env -i bash -c 'git show'", 'env -i'],
     ["env -iS'git show'", 'env -i'],
     ['env -S "-i git log"', 'env -i'],
+    // --split-string takes its string as a separate word even when that string starts
+    // with a dash, so the string is read as env options and a command, not as flags
+    ['env --split-string "-i git log"', 'env -i'],
+    ['env --split-string \'-i git log\'', 'env -i'],
     ['env -S "-u GIT_CONFIG_COUNT git log"', 'GIT_CONFIG_COUNT'],
     // the words after an env -S string are part of the command it runs
     ['env -S env -i git log', 'env -i'],
@@ -1709,6 +1717,15 @@ test('an internal error fails closed (exit 2), not open', () => {
     const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { input, encoding: 'utf8' });
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /internal error \(boom\); blocking \(fail closed\)/);
+});
+
+// wrapperTarget() finds the word a wrapper runs by stepping over the value of
+// each option that takes one. The string env -S and --split-string take is read
+// again by other scans, so a row run through the hook cannot tell a missing
+// table entry from a present one; check the index directly.
+test('wrapperTarget steps over the value word of env -S and --split-string', () => {
+    assert.equal(wrapperTarget(['env', '-S', 'a b', 'c']), 3);
+    assert.equal(wrapperTarget(['env', '--split-string', 'a b', 'c']), 3);
 });
 
 // closeParen() decides where a `$(...)`, `<(...)` or `>(...)` body ends. Run
