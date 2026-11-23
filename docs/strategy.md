@@ -82,7 +82,7 @@ Priorities follow from these, in this order:
 4. **Untested installer paths.** The installers and `configure.py` are the
    least covered code, because they cannot be run on the host. The e2e test
    runs them in a throwaway container; anything it does not reach is a known
-   gap and a reason for owner review, not for an agent to try it on the host.
+   gap and a reason for careful review, not for an agent to try it on the host.
 
 ## Measurable goals
 

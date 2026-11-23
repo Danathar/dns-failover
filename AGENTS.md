@@ -101,16 +101,25 @@ Python.
 
 Changes are classified by what they touch; the full list is in
 [docs/risk-tiers.md](docs/risk-tiers.md) (machine-readable in
-`risk-config.json`).
+`risk-config.json`). The tier sets the checks to run and how closely the
+change is reviewed, not who reviews it.
 
-- **Tier 1, critical** (owner review, all checks): workflows, `CODEOWNERS`,
+- **Tier 1, critical** (all checks): workflows, `CODEOWNERS`,
   rulesets, `.claude/settings.json` and hooks, `policies/`,
   `scripts/check-policies.mjs`, `risk-config.json`, `LICENSE`, `AGENTS.md`,
   both installers, `configure.py`, `monitor.py`, `dns-upstream-check.py`.
-- **Tier 2, high** (owner review): `dns-upstream-probe.py`, units, dnsmasq and
+- **Tier 2, high**: `dns-upstream-probe.py`, units, dnsmasq and
   Stubby configs, `pyproject.toml`, tool-specific agent files, skills, memory,
   the session summary, `docs/security/`.
 - **Tier 3, standard:** everything else.
+
+**Owner review** (owner decision 2026-11-23): only a pull request touching
+`.github/rulesets/**` or `.github/CODEOWNERS` needs the owner. The hive's
+`auto_merge.human_merge_paths` gate labels it `needs-owner-merge` and leaves it
+for a person to merge. Every other pull request, whatever its tier, merges on
+the required checks plus the hive's AI reviewer. `.github/CODEOWNERS` lists
+exactly those two paths (`owner_merge_paths` in `risk-config.json`), and
+`node scripts/check-policies.mjs` fails if it lists anything else.
 
 ## Where things go
 

@@ -94,7 +94,7 @@ Rules that never bend, whatever the task says:
 
 `policies/installer-safety.json` checks that these steps are present and in
 order. It proves the guard exists, not that it is correct; the e2e test and the
-owner's review do that.
+hive reviewer's reading of the change do that.
 
 ## 4. Credentials, the tailnet and site-specific data
 

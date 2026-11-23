@@ -279,7 +279,7 @@ Keep site-specific files and secrets outside version control when adapting this 
 
 Maintenance is assisted by [Hivecommons Hive](https://github.com/hivecommons/hive), which runs a fleet of AI agents against this repo at ACMM level 6 (Autonomous). The repository is maintained by [@Danathar](https://github.com/Danathar).
 
-**What L6 permits here:** agents file issues and open pull requests, and agent pull requests merge once their required checks pass unless they carry `hold`. Tier 1 and Tier 2 changes (the failover scripts, units, workflows and policies) need the owner to read and merge them; docs and tests need only passing CI. The reviewer agent comments with file and line references but never approves, merges or closes anything.
+**What L6 permits here:** agents file issues and open pull requests, and agent pull requests merge once their required checks pass unless they carry `hold`. Only changes to the branch rulesets (`.github/rulesets/`) or `.github/CODEOWNERS` wait for the owner to merge them; everything else, the failover scripts, units, workflows and policies included, merges on the required checks plus the hive's AI reviewer (owner decision, 2026-11-23). The reviewer agent comments with file and line references but never approves, merges or closes anything.
 
 See [`docs/branch-protection.md`](docs/branch-protection.md) for the required checks, [`docs/risk-tiers.md`](docs/risk-tiers.md) for which changes need a human, [`docs/multi-agent.md`](docs/multi-agent.md) for how agents share the repo and [`docs/agent-boundaries.md`](docs/agent-boundaries.md) for what an agent may change without the owner.
 

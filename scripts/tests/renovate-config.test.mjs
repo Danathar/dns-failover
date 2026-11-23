@@ -26,7 +26,7 @@ test('renovate.json requires dashboard approval for workflow-file updates', () =
     );
     assert.ok(
         rule,
-        'a packageRule must match .github/workflows/** (Tier 1 paths need owner approval)',
+        'a packageRule must match .github/workflows/** (workflow updates wait for the owner to approve them on the Dependency Dashboard)',
     );
     assert.equal(rule.dependencyDashboardApproval, true);
     assert.ok(

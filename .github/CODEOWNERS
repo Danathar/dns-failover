@@ -1,44 +1,16 @@
-# Only the Tier 1 and Tier 2 paths are listed, and there is no catch-all `*`.
-# The ruleset (.github/rulesets/main.json) requires code owner review, so every
-# path listed here needs the owner's approving review before it can merge, and
-# a `*` line would extend that to every pull request. Tier 3 paths merge on the
-# required checks. scripts/check-policies.mjs fails when an owner-review path is
-# missing here or a `*` line comes back. docs/agent-boundaries.md explains it.
+# GitHub no longer requires code owner review: the "protect main" ruleset
+# (.github/rulesets/main.json) has require_code_owner_review false, by the
+# owner's decision of 2026-11-23. Ordinary changes merge on the required checks
+# plus the hive's AI reviewer.
+#
+# The two paths below still need the owner. What enforces that is the hive's
+# own merge gate (auto_merge.human_merge_paths in the hive's config): it holds
+# a pull request touching them with the needs-owner-merge label until a person
+# merges it. This file only asks GitHub to request the owner's review on them.
+#
+# These lines must match owner_merge_paths in risk-config.json, and nothing
+# else may be listed (no catch-all `*`): scripts/check-policies.mjs fails
+# otherwise. docs/agent-boundaries.md explains it.
 
-# Tier 1 (critical) paths from docs/risk-tiers.md and risk-config.json.
-/.github/workflows/                             @Danathar
-/.github/CODEOWNERS                             @Danathar
 /.github/rulesets/                              @Danathar
-/.claude/settings.json                          @Danathar
-/.claude/hooks/                                 @Danathar
-/policies/                                      @Danathar
-/scripts/check-policies.mjs                     @Danathar
-/risk-config.json                               @Danathar
-/renovate.json                                  @Danathar
-/LICENSE                                        @Danathar
-/AGENTS.md                                      @Danathar
-/install-dns-failover.sh                        @Danathar
-/tailscale-dns-failover/install.sh              @Danathar
-/tailscale-dns-failover/configure.py            @Danathar
-/tailscale-dns-failover/monitor.py              @Danathar
-/dns-upstream-check.py                          @Danathar
-
-# Tier 2 (high) paths.
-/dns-upstream-probe.py                          @Danathar
-*.service                                       @Danathar
-*.timer                                         @Danathar
-dnsmasq-*.conf                                  @Danathar
-*.conf.example                                  @Danathar
-stubby-*.yml                                    @Danathar
-stubby-*.yml.example                            @Danathar
-/pyproject.toml                                 @Danathar
-/CLAUDE.md                                      @Danathar
-/.github/copilot-instructions.md                @Danathar
-/.cursor/rules/                                 @Danathar
-/.github/prompts/                               @Danathar
-/.claude/skills/                                @Danathar
-/.claude/memory/                                @Danathar
-/.claude/session-summary.md                     @Danathar
-/docs/risk-tiers.md                             @Danathar
-/docs/agent-boundaries.md                       @Danathar
-/docs/security/                                 @Danathar
+/.github/CODEOWNERS                             @Danathar

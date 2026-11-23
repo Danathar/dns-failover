@@ -39,7 +39,9 @@ with the reasoning, and resolve the thread either way.
       sensitive the path, the more of sections 2-7 apply and the less a green
       CI is worth by itself. Tier 1 paths (workflows, the hook and its
       settings, `policies/`, the installers, `configure.py`, `monitor.py`,
-      `dns-upstream-check.py`) need the owner's review and every check.
+      `dns-upstream-check.py`) need every check and the closest reading.
+      Owner review is needed only for `.github/rulesets/**` and
+      `.github/CODEOWNERS`, which the hive holds for the owner to merge.
       Agent limits per path are in [agent-boundaries.md](agent-boundaries.md).
 - [ ] **Host rule.** Nothing in the diff, the tests or the PR body runs, on
       the host, `sudo`, either installer, `configure.py`, `monitor.py` in any

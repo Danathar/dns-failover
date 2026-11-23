@@ -169,13 +169,16 @@ No agent merges its own pull request unless the owner has set that up.
   a bad merge is a bad update to resolver behaviour. That is the reason for the
   serial lane and for the runbook's
   [bad deploy](ai-ops-runbook.md#a-bad-change-reached-the-dns-server) section.
-- **An agent's permission boundary needs the owner.** Changes to
-  `.claude/settings.json`, `.claude/hooks/**`, `policies/` or
-  `.github/CODEOWNERS` are read and merged by the owner, whoever wrote them. An
-  agent must not widen its own boundary
+- **Only the rulesets and CODEOWNERS wait for the owner.** By the owner's
+  decision of 2026-11-23, a pull request touching `.github/rulesets/**` or
+  `.github/CODEOWNERS` is held by the hive (`needs-owner-merge`, from its
+  `auto_merge.human_merge_paths` setting) until a person merges it. Everything
+  else, `.claude/settings.json`, `.claude/hooks/**`, `policies/` and the
+  workflows included, merges on the required checks plus the hive's reviewer.
+  An agent still must not widen its own boundary without the owner's decision
   ([`agent-boundaries.md`](agent-boundaries.md),
   [`security/SECURITY-AI.md`](security/SECURITY-AI.md)).
-- **Risk tiers set how hard the owner looks.** See
+- **Risk tiers set how hard the reviewer looks.** See
   [`risk-tiers.md`](risk-tiers.md): the failover scripts and installers are
   Tier 1.
 
@@ -187,4 +190,5 @@ No agent merges its own pull request unless the owner has set that up.
 4. Obey the host rule: tests and the throwaway container only.
 5. Run the checks for the files you changed; say in the PR which you ran and
    which you did not.
-6. Leave the merge to the lane and the owner.
+6. Leave the merge to the lane (and to the owner for the rulesets and
+   CODEOWNERS).

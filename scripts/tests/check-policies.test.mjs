@@ -733,7 +733,7 @@ test('cli: exits 1 with violations and 0 when clean; --classify prints tiers', (
             { encoding: 'utf8' },
         );
         assert.equal(r3.status, 0);
-        assert.match(r3.stdout, /LICENSE: tier 1 \(critical\), review: owner/);
+        assert.match(r3.stdout, /LICENSE: tier 1 \(critical\), review: ci/);
         assert.match(r3.stdout, /docs\/a\.md: tier 3 \(standard\)/);
     } finally {
         fs.rmSync(bad, { recursive: true, force: true });
@@ -1050,23 +1050,34 @@ test('codeowners: directory and any-depth globs map to the entries CODEOWNERS us
     assert.equal(codeownersPattern('**/stubby-*.yml.example'), 'stubby-*.yml.example');
 });
 
-test('codeowners: every owner-review path of this repository is listed', () => {
+test('codeowners: the owner-merge paths of this repository are listed, and nothing else', () => {
     const config = JSON.parse(RISK);
+    assert.deepEqual(config.owner_merge_paths, ['.github/rulesets/**', '.github/CODEOWNERS']);
     assert.deepEqual(checkCodeowners(config, CODEOWNERS, config.owner), []);
 });
 
-test('codeowners: a dropped entry, a wrong owner and a catch-all fail', () => {
+test('codeowners: a dropped entry, a wrong owner, an extra entry and a catch-all fail', () => {
     const config = JSON.parse(RISK);
     const without = (line) => CODEOWNERS.split('\n').filter((l) => !l.startsWith(line)).join('\n');
-    assert.match(checkCodeowners(config, without('/policies/'), '@Danathar').join('\n'), /"policies\/\*\*" needs an entry "\/policies\/ @Danathar"/);
-    assert.match(checkCodeowners(config, without('*.service'), '@Danathar').join('\n'), /\*\.service/);
-    assert.match(checkCodeowners(config, CODEOWNERS.replace('/LICENSE ', '/LICENSE @someone-else # '), '@Danathar').join('\n'), /LICENSE/);
+    assert.match(checkCodeowners(config, without('/.github/rulesets/'), '@Danathar').join('\n'), /owner-merge path "\.github\/rulesets\/\*\*" needs an entry "\/\.github\/rulesets\/ @Danathar"/);
+    assert.match(checkCodeowners(config, without('/.github/CODEOWNERS'), '@Danathar').join('\n'), /"\.github\/CODEOWNERS" needs an entry/);
+    assert.match(checkCodeowners(config, CODEOWNERS.replace('/.github/CODEOWNERS ', '/.github/CODEOWNERS @someone-else # '), '@Danathar').join('\n'), /CODEOWNERS" needs an entry/);
+    // CODEOWNERS no longer lists the old Tier 1 and Tier 2 paths.
+    const extra = checkCodeowners(config, `${CODEOWNERS}/policies/ @Danathar\n`, '@Danathar');
+    assert.deepEqual(extra, ['.github/CODEOWNERS: "/policies/" is not one of the owner_merge_paths in risk-config.json; CODEOWNERS lists only those']);
     assert.match(checkCodeowners(config, `* @Danathar\n${CODEOWNERS}`, '@Danathar').join('\n'), /no "\*" entry/);
 });
 
+test('codeowners: owner_merge_paths must be a non-empty list of globs', () => {
+    for (const bad of [undefined, [], [''], 'x', [1]]) {
+        const config = { ...JSON.parse(RISK), owner_merge_paths: bad };
+        assert.deepEqual(checkCodeowners(config, CODEOWNERS, '@Danathar'), ['risk-config.json: "owner_merge_paths" must be a non-empty array of path globs'], String(bad));
+    }
+});
+
 test('codeowners: checkAll reports a drop in a real tree and a bad owner field', () => {
-    const v = run({ '.github/CODEOWNERS': CODEOWNERS.replace(/^\/docs\/security\/.*$/m, '') });
-    assert.ok(v.some((x) => /docs\/security\/\*\*/.test(x)), v.join('|'));
+    const v = run({ '.github/CODEOWNERS': CODEOWNERS.replace(/^\/\.github\/rulesets\/.*$/m, '') });
+    assert.ok(v.some((x) => /\.github\/rulesets\/\*\*/.test(x)), v.join('|'));
     const cfg = { ...JSON.parse(RISK), owner: 'Danathar' };
     assert.ok(run({ 'risk-config.json': JSON.stringify(cfg) }).some((x) => /"owner" must be/.test(x)));
 });
@@ -1097,69 +1108,74 @@ test('codeowners: patterns match the way GitHub applies them', () => {
     assert.ok(codeownersRegExp('/.claude/hooks/**').test('.claude/hooks/tests/guard-bash.test.mjs'));
 });
 
-test('codeowners: every owner-review file of this repository ends up with the owner', () => {
+test('codeowners: every owner-merge file of this repository ends up with the owner', () => {
     const config = JSON.parse(RISK);
     assert.deepEqual(checkCodeowners(config, CODEOWNERS, config.owner, walk(repoRoot)), []);
 });
 
-test('codeowners: a later entry that takes a Tier 1 or 2 file off the owner fails', () => {
-    // GitHub applies the last matching entry, so each of these removes the
-    // owner's review from files whose own entries above are still intact.
+test('codeowners: a later entry that takes an owner-merge file off the owner fails', () => {
+    // GitHub applies the last matching entry, so each of these stops the
+    // owner's review request on files whose own entries above are intact.
     const config = JSON.parse(RISK);
     const files = walk(repoRoot);
     const cases = [
-        ['*.py', /tier 1 file "tailscale-dns-failover\/monitor\.py" ends up with no owner: .*"\*\.py"/],
-        ['/tailscale-dns-failover/ @someone-else', /tier 1 file "tailscale-dns-failover\/configure\.py" ends up with @someone-else/],
-        ['/.github/', /tier 1 file "\.github\/workflows\/ci\.yml" ends up with no owner/],
-        ['docs/ @someone-else', /tier 2 file "docs\/risk-tiers\.md" ends up with @someone-else/],
-        ['/scripts/ @someone-else', /tier 1 file "scripts\/check-policies\.mjs"/],
+        ['*.json', /owner-merge file "\.github\/rulesets\/main\.json" ends up with no owner: .*"\*\.json"/],
+        ['/.github/ @someone-else', /owner-merge file "\.github\/CODEOWNERS" ends up with @someone-else/],
+        ['/.github/', /owner-merge file "\.github\/rulesets\/main\.json" ends up with no owner/],
     ];
     for (const [line, want] of cases) {
         const v = checkCodeowners(config, `${CODEOWNERS}${line}\n`, config.owner, files);
         assert.match(v.join('\n'), want, line);
     }
     // A one-level owner entry after an unowned one does not win back nested
-    // files: GitHub's `dir/*` stops at that depth, so `*.mjs` still applies.
-    const nested = checkCodeowners(config, `${CODEOWNERS}*.mjs\n/.claude/hooks/* @Danathar\n`, config.owner, files);
-    assert.match(nested.join('\n'), /tier 1 file "\.claude\/hooks\/tests\/guard-bash\.test\.mjs" ends up with no owner: .*"\*\.mjs"/);
-    assert.ok(!nested.some((x) => /file "\.claude\/hooks\/guard-bash\.mjs"/.test(x)), nested.join('|'));
-    // The same entry placed before the owner's entries is overridden by them.
-    assert.deepEqual(checkCodeowners(config, `*.py\n${CODEOWNERS}`, config.owner, files), []);
-    // A later entry that keeps the owner, or only covers Tier 3 files, is fine.
-    assert.deepEqual(checkCodeowners(config, `${CODEOWNERS}*.py @someone-else @Danathar\n`, config.owner, files), []);
-    assert.deepEqual(checkCodeowners(config, `${CODEOWNERS}/tests/ @someone-else\n`, config.owner, files), []);
+    // files: GitHub's `dir/*` stops at that depth, so `*.json` still applies.
+    const nestedFiles = ['.github/rulesets/main.json', '.github/rulesets/old/x.json'];
+    const nested = checkCodeowners(config, `${CODEOWNERS}*.json\n/.github/rulesets/* @Danathar\n`, config.owner, nestedFiles);
+    assert.match(nested.join('\n'), /owner-merge file "\.github\/rulesets\/old\/x\.json" ends up with no owner: .*"\*\.json"/);
+    assert.ok(!nested.some((x) => /file "\.github\/rulesets\/main\.json"/.test(x)), nested.join('|'));
+    // The same entry placed before the owner's entries is overridden by them
+    // (it is still reported as an extra entry, but no file loses the owner).
+    const before = checkCodeowners(config, `*.json\n${CODEOWNERS}`, config.owner, files);
+    assert.ok(!before.some((x) => /owner-merge file/.test(x)), before.join('|'));
+    // A later entry that keeps the owner, or covers no owner-merge file, takes
+    // no file off the owner.
+    for (const line of ['*.json @someone-else @Danathar', '/tests/ @someone-else', '*.py']) {
+        const v = checkCodeowners(config, `${CODEOWNERS}${line}\n`, config.owner, files);
+        assert.ok(!v.some((x) => /owner-merge file/.test(x)), `${line}: ${v.join('|')}`);
+    }
 });
 
-test('codeowners: an owner-review file no entry matches fails', () => {
+test('codeowners: an owner-merge file no entry matches fails', () => {
     const config = JSON.parse(RISK);
-    const v = checkCodeowners(config, '/LICENSE @Danathar\n', config.owner, ['LICENSE', 'AGENTS.md', 'README.md']);
-    assert.match(v.join('\n'), /tier 1 file "AGENTS\.md" matches no entry/);
-    assert.ok(!v.some((x) => /"README\.md"/.test(x)), v.join('|'));
-    assert.ok(!v.some((x) => /file "LICENSE"/.test(x)), v.join('|'));
+    const v = checkCodeowners(config, '/.github/CODEOWNERS @Danathar\n', config.owner, ['.github/CODEOWNERS', '.github/rulesets/main.json', 'AGENTS.md', 'LICENSE']);
+    assert.match(v.join('\n'), /owner-merge file "\.github\/rulesets\/main\.json" matches no entry/);
+    // Former Tier 1 files no longer need an entry.
+    assert.ok(!v.some((x) => /"AGENTS\.md"|"LICENSE"/.test(x)), v.join('|'));
+    assert.ok(!v.some((x) => /file "\.github\/CODEOWNERS"/.test(x)), v.join('|'));
 });
 
 test('codeowners: checkAll reports a later entry that overrides the owner', () => {
-    const v = run({ '.github/CODEOWNERS': `${CODEOWNERS}*.py\n` });
-    assert.ok(v.some((x) => /file "tailscale-dns-failover\/configure\.py" ends up with no owner/.test(x)), v.join('|'));
+    const v = run({ '.github/CODEOWNERS': `${CODEOWNERS}*.json\n`, '.github/rulesets/main.json': read('.github/rulesets/main.json') });
+    assert.ok(v.some((x) => /file "\.github\/rulesets\/main\.json" ends up with no owner/.test(x)), v.join('|'));
 });
 
 test('codeowners: a wildcard before the last segment still reaches nested files', () => {
-    // `*/hooks` names a directory, so it covers everything under it even
+    // `*/rulesets` names a directory, so it covers everything under it even
     // though an earlier segment is a wildcard; only a wildcard in the last
     // segment stops at that depth.
-    assert.ok(codeownersRegExp('*/hooks').test('.claude/hooks/tests/guard-bash.test.mjs'));
+    assert.ok(codeownersRegExp('*/rulesets').test('.github/rulesets/main.json'));
     const config = JSON.parse(RISK);
-    const v = checkCodeowners(config, `${CODEOWNERS}*/hooks\n`, config.owner, walk(repoRoot));
-    assert.match(v.join('\n'), /tier 1 file "\.claude\/hooks\/guard-bash\.mjs" ends up with no owner: .*"\*\/hooks"/);
+    const v = checkCodeowners(config, `${CODEOWNERS}*/rulesets\n`, config.owner, ['.github/rulesets/main.json']);
+    assert.match(v.join('\n'), /owner-merge file "\.github\/rulesets\/main\.json" ends up with no owner: .*"\*\/rulesets"/);
 });
 
 test('codeowners: a ? in a later owner entry does not win back a file across a /', () => {
     // `?` matches one character inside a segment, as in GitHub, so this owner
-    // entry covers nothing and the unowned `/.claude/` line still applies.
+    // entry covers nothing and the unowned `/.github/` line still applies.
     const config = JSON.parse(RISK);
-    const text = `${CODEOWNERS}/.claude/\n/.claude?settings.json @Danathar\n`;
-    const v = checkCodeowners(config, text, config.owner, walk(repoRoot));
-    assert.match(v.join('\n'), /tier 1 file "\.claude\/settings\.json" ends up with no owner: .*"\/\.claude\/"/);
+    const text = `${CODEOWNERS}/.github/\n/.github?CODEOWNERS @Danathar\n`;
+    const v = checkCodeowners(config, text, config.owner, ['.github/CODEOWNERS']);
+    assert.match(v.join('\n'), /owner-merge file "\.github\/CODEOWNERS" ends up with no owner: .*"\/\.github\/"/);
 });
 
 test('globToRegExp: ? matches exactly one character and never a /', () => {

@@ -47,7 +47,9 @@ checks. Add or update a test for each behaviour change and update the README
 if user-visible behaviour or configuration changes.
 
 Changes are classified by risk; see [docs/risk-tiers.md](docs/risk-tiers.md).
-Tier 1 and Tier 2 paths need owner review.
+Only changes to `.github/rulesets/**` or `.github/CODEOWNERS` need the owner,
+who merges them; everything else merges on the required checks plus the hive's
+AI reviewer.
 
 ## Commits and PRs
 

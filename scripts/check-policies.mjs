@@ -14,7 +14,7 @@
  *   3. policies/installer-safety.json   install-dns-failover.sh validates and restores dnsmasq.conf
  *   4. policies/credential-safety.json  root-only credentials, auto_restore off, no secrets or profile IDs
  *   5. docs/risk-tiers.md vs risk-config.json  tier table drift
- *   6. .github/CODEOWNERS vs risk-config.json  owner-review paths are listed
+ *   6. .github/CODEOWNERS vs risk-config.json  CODEOWNERS lists exactly the owner_merge_paths
  *   7. policies/temp-path-safety.json   no shipped file names a fixed folder in the shared temporary directory
  *
  * Node built-ins only. Exit code 1 when any violation is found.
@@ -352,18 +352,27 @@ export function codeownersRegExp(pattern) {
 }
 
 /**
- * Every path of a tier whose review is `owner` must be listed in CODEOWNERS
- * with the owner, so the required review cannot drift from docs/risk-tiers.md.
- * There must be no `*` entry: the ruleset requires code owner review, so a
- * catch-all would make every pull request, Tier 3 included, wait for the owner.
+ * CODEOWNERS must match `owner_merge_paths` in risk-config.json: the paths the
+ * hive's `human_merge_paths` gate holds for the owner to merge (it labels such
+ * pull requests `needs-owner-merge`). GitHub no longer requires code owner
+ * review, so CODEOWNERS only asks GitHub to request the owner's review on
+ * those paths; this check keeps the two lists from drifting.
+ *
+ * Every owner-merge path needs an entry with the owner, and CODEOWNERS may
+ * list nothing else. A catch-all `*` gets its own message: it would request
+ * the owner's review on every pull request.
  *
  * GitHub applies the last entry that matches a file, so an entry being present
- * is not enough: a later line such as `*.py` with no owner would take the
- * owner's review off every Tier 1 script while every entry above is intact.
- * Each of `files` that classifies into an owner-review tier must therefore be
- * owned by `owner` under its last matching entry.
+ * is not enough: a later line that matches a ruleset file with no owner would
+ * stop the request while the entry above is intact. Each of `files` that
+ * matches an owner-merge path must therefore be owned by `owner` under its
+ * last matching entry.
  */
 export function checkCodeowners(config, text, owner, files = []) {
+    const globs = config.owner_merge_paths;
+    if (!Array.isArray(globs) || globs.length === 0 || !globs.every((g) => typeof g === 'string' && g)) {
+        return ['risk-config.json: "owner_merge_paths" must be a non-empty array of path globs'];
+    }
     const v = [];
     const entries = new Map();
     const ordered = [];
@@ -374,27 +383,29 @@ export function checkCodeowners(config, text, owner, files = []) {
         entries.set(pat, owners);
         ordered.push({ pat, owners, re: codeownersRegExp(pat) });
     }
-    if (entries.has('*')) {
-        v.push('.github/CODEOWNERS: no "*" entry; code owner review is required, so it would cover every pull request');
+    const wanted = new Set(globs.map(codeownersPattern));
+    for (const pat of new Set(ordered.map((e) => e.pat))) {
+        if (wanted.has(pat)) continue;
+        if (pat === '*') {
+            v.push('.github/CODEOWNERS: no "*" entry; it would request the owner\'s review on every pull request, and CODEOWNERS lists only the owner_merge_paths in risk-config.json');
+        } else {
+            v.push(`.github/CODEOWNERS: "${pat}" is not one of the owner_merge_paths in risk-config.json; CODEOWNERS lists only those`);
+        }
     }
-    for (const t of config.tiers) {
-        if (t.review !== 'owner') continue;
-        for (const g of t.paths) {
-            const want = codeownersPattern(g);
-            if (!(entries.get(want) ?? []).includes(owner)) {
-                v.push(`.github/CODEOWNERS: tier ${t.tier} path "${g}" needs an entry "${want} ${owner}"`);
-            }
+    for (const g of globs) {
+        const want = codeownersPattern(g);
+        if (!(entries.get(want) ?? []).includes(owner)) {
+            v.push(`.github/CODEOWNERS: owner-merge path "${g}" needs an entry "${want} ${owner}"`);
         }
     }
     for (const f of files) {
-        const t = classify(config, f);
-        if (t.review !== 'owner') continue;
+        if (!matchesAny(globs, f)) continue;
         const last = ordered.findLast((e) => e.re.test(f));
         if (!last) {
-            v.push(`.github/CODEOWNERS: tier ${t.tier} file "${f}" matches no entry, so it needs no review`);
+            v.push(`.github/CODEOWNERS: owner-merge file "${f}" matches no entry, so GitHub requests no review`);
         } else if (!last.owners.includes(owner)) {
             const who = last.owners.length ? last.owners.join(' ') : 'no owner';
-            v.push(`.github/CODEOWNERS: tier ${t.tier} file "${f}" ends up with ${who}: GitHub applies its last matching entry, "${last.pat}"`);
+            v.push(`.github/CODEOWNERS: owner-merge file "${f}" ends up with ${who}: GitHub applies its last matching entry, "${last.pat}"`);
         }
     }
     return v;

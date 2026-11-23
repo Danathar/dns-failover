@@ -169,16 +169,20 @@ Signal: a pull request from an agent changes a path in Tier 1 of
    `Closes #N`. A Tier 1 change the issue does not ask for is a reason to close
    the PR, not to review it.
    `gh pr diff <N> --repo Danathar/dns-failover --name-only`
-2. **Read it as the owner.** CODEOWNERS requests your review; the serialized
-   lane merges only after the required checks pass, and passing checks do not
-   replace reading a change to what runs as root or to an agent's own
-   permissions ([`agent-boundaries.md`](agent-boundaries.md)).
+2. **Decide whether to read it yourself.** Since 2026-11-23 a Tier 1 pull
+   request merges on the required checks plus the hive's reviewer, with no
+   owner review, unless it touches `.github/rulesets/**` or
+   `.github/CODEOWNERS`: those carry `needs-owner-merge` and wait for you to
+   merge them. To read any other one first, put `hold` on it before the
+   serialized lane reaches it
+   ([`agent-boundaries.md`](agent-boundaries.md)).
 3. **For the failover scripts**, check that the thresholds, the atomic write and
    the PID check are covered by a test that fails without the change, and that
    the PR states which tests it ran. It cannot have run the real thing; if it
    says it did, close it and read [the host rule](multi-agent.md#rule-1-the-host-rule).
 4. **For the boundary** (`.claude/`, `policies/`, workflows), ask whether it
-   widens what an agent may do. If so, it needs the owner's explicit decision.
+   widens what an agent may do. If so, it needs the owner's explicit decision
+   (AGENTS.md, "Always ask the owner first"); hold it if it has none.
 5. Do not hand-edit the agent's branch; comment, or take over in your own.
 
 ## A bad change reached the DNS server
