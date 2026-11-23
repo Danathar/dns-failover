@@ -224,6 +224,20 @@
             "original": "configKey !== null",
             "replacement": "true",
             "reason": "Equivalent in the safe.* refusal: configKey is null only when the option is neither `-c` nor `--config-env`, and then `/^safe\\./i.test(null)` tests the text \"null\", which never starts with `safe.`, so the refusal is the same either way."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "ConditionalExpression",
+            "original": "assignedName(a) !== null",
+            "replacement": "true",
+            "reason": "Equivalent in the HOME/PATH refusal for declare, typeset, local and readonly: assignedName() is null only for a word with no `=`, and then `CONFIG_REACH_ENV.test(null)` tests the text \"null\", which never matches HOME, XDG_CONFIG_HOME or PATH, so the refusal is the same either way."
+        },
+        {
+            "file": ".claude/hooks/guard-bash.mjs",
+            "mutator": "Regex",
+            "original": "/^([^=]*\\[[^=]*\\]\\+?)=/",
+            "replacement": "/([^=]*\\[[^=]*\\]\\+?)=/",
+            "reason": "Harmless over-refusal: exec() returns the leftmost match, so wherever the anchored pattern matches the unanchored one returns the same capture. It differs only for a command word with an `=` before a subscript that is not an assignment (`./x=PATH[0]=y`), which it would refuse as well."
         }
     ]
 }

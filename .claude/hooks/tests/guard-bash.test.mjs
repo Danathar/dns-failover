@@ -302,6 +302,23 @@ const allowed = [
     'echo "$(case a in a) echo hi;; esac) done"',
     'x=$(case a in (a) echo hi;; b|c) echo no;& d) echo x;;& esac); echo "$x"',
     'echo $(echo case a in a) git push --force origin main',
+    // reading HOME or PATH, or setting another name, changes nothing git reads
+    'cd "$HOME" && git status',
+    'echo "$PATH"',
+    'TZ=UTC; git log -1',
+    'TZ=UTC git log -1',
+    'export FOO=1; git log -1',
+    'export HOME',
+    'export PATHS=x',
+    'MANPATH=/usr/share/man git log -1',
+    'HOMEBREW_NO_ANALYTICS=1 git log -1',
+    "git log -p -S 'PATH=' -- docs",
+    // printf -v, read and for assigning another name, or HOME only as a loop value
+    'printf -v FOO 0',
+    'read FOO',
+    'for x in HOME; do echo $x; done',
+    // HOME or PATH as an operand of any other command is only a word
+    'grep PATH README.md',
 ];
 
 const blocked = [
@@ -401,6 +418,48 @@ const blocked = [
     ['env - git status', 'env -i'],
     ['env -iu X git status', 'env -i'],
     ['env -i PATH=/usr/bin git log -p', 'env -i'],
+    // HOME and XDG_CONFIG_HOME choose git's global config file, PATH chooses
+    // which git runs, so a folder a branch committed can make git run a program.
+    ['HOME=planted git diff HEAD~1 HEAD', 'HOME=planted git'],
+    ['HOME=planted; git log -p', 'changes where git reads its global config'],
+    ['HOME+=/planted; git log -p', 'HOME+=/planted'],
+    ['XDG_CONFIG_HOME=planted git diff HEAD~1 HEAD', 'changes where git reads its global config'],
+    ['XDG_CONFIG_HOME=planted; git log -p', 'changes where git reads its global config'],
+    ['PATH=planted:$PATH git log -1', 'changes where git reads its global config'],
+    ['PATH=planted:$PATH; git log -1', 'which program runs as git (PATH)'],
+    ['PATH=planted:$PATH node --test', 'which program runs as git (PATH)'],
+    ['env HOME=planted git log -p', 'changes where git reads its global config'],
+    ['timeout 5 env PATH=planted:$PATH git log -1', 'changes where git reads its global config'],
+    ["bash -c 'HOME=planted git log -p'", 'changes where git reads its global config'],
+    ['export HOME=planted; git diff HEAD~1 HEAD', 'export HOME=planted'],
+    ['export PATH=planted:$PATH; git diff HEAD~1 HEAD', 'changes where git reads its global config'],
+    ['export HOME+=/planted; git log -p', 'changes where git reads its global config'],
+    ['declare -x XDG_CONFIG_HOME=planted; git log -p', 'changes where git reads its global config'],
+    ['declare HOME+=/planted; git log -p', 'changes where git reads its global config'],
+    ['typeset PATH=planted; git log -1', 'Run commands with the HOME and PATH you already have'],
+    // the refusal names the declaring command and the assignment operand
+    ['typeset PATH=planted; git log -1', '`typeset PATH=planted`'],
+    ['readonly XDG_CONFIG_HOME=planted; git log -p', '`readonly XDG_CONFIG_HOME=planted`'],
+    // a non-git command under `env -i` keeps the refusal: only git is exempt, since git is refused for env -i below
+    ['env -i HOME=planted node --test', '`HOME=planted node`'],
+    ['env -i PATH=/usr/bin node --test', '`PATH=/usr/bin node`'],
+    ['local HOME=planted; git log -p', 'changes where git reads its global config'],
+    ['readonly HOME=planted; git log -p', 'changes where git reads its global config'],
+    // printf -v, read and for assign a name as a statement, and it stays exported
+    ['for HOME in planted; do git log -p; done', '`for HOME`'],
+    ['select XDG_CONFIG_HOME in planted; do git log -p; done', '`select XDG_CONFIG_HOME`'],
+    ['read HOME <<< planted; git log -p', '`read HOME`'],
+    ['mapfile PATH < planted; git log -1', '`mapfile PATH`'],
+    ['readarray -t XDG_CONFIG_HOME < planted; git log -p', '`readarray XDG_CONFIG_HOME`'],
+    ['printf -v HOME planted; git log -p', '`printf -v HOME`'],
+    ['printf -vXDG_CONFIG_HOME planted; git log -p', '`printf -v XDG_CONFIG_HOME`'],
+    ['printf -v PATH planted; git log -1', 'which program runs as git (PATH)'],
+    // a subscript assigns the variable itself
+    ['PATH[0]=planted; git log -1', '`PATH[0]=planted`'],
+    ['HOME[0]+=/planted; git log -p', 'changes where git reads its global config'],
+    // a subscript of more than one character still names element 0 (`[00]`, `[1-1]`)
+    ['PATH[00]=planted; git log -1', '`PATH[00]=planted`'],
+    ['HOME[1-1]=planted git log -p', 'changes where git reads its global config'],
     ['env -i timeout 5 git show', 'env -i'],
     ["env -i bash -c 'git show'", 'env -i'],
     ["env -iS'git show'", 'env -i'],
