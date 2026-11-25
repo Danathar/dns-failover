@@ -53,6 +53,9 @@
 //     of any command, through `env NAME=value`, as a statement of its own,
 //     or as an operand of export/declare/typeset/local/readonly. The first
 //     two choose the global git config file, PATH chooses which git runs.
+//     The same names, and the GIT_CONFIG_* ones, assigned by read, mapfile,
+//     getopts, printf -v, let or a loop variable, or named in an arithmetic
+//     command or expansion (`(( PATH = 1 ))`, `: $(( HOME = 1 ))`).
 //   - git, node, python/pytest, curl/wget, systemctl/service/tailscale or a
 //     shell run through xargs: xargs appends words read at run time
 //     (`printf '%s\n' --output=FILE | xargs git log`), so none of the
@@ -164,11 +167,11 @@ import { fileURLToPath } from 'node:url';
 // sha256), so a reading fix lands in its canonical copy in Danathar/akmods
 // first and is copied here byte for byte. What is refused, and why, stays here.
 import {
-    ARGUMENT_ONLY_PROGRAMS, braceForms, BUDGET_MS, changesDirectory, CHDIR, COMMAND_STRING_SEPARATORS,
+    ARGUMENT_ONLY_PROGRAMS, braceForms, BUDGET_MS, changesDirectory, CHDIR, closeParen, COMMAND_STRING_SEPARATORS,
     commandNameReader, commandStrings, EXEC_GIT_CONFIG, expandWrapperOptions, extractSubstitutions, FIND_EXEC, firstWord,
     fishScripts, GIT_EXEC_OPTION, GIT_SHORT_UPLOAD_PACK, GIT_UPLOAD_PACK_OPTION, GIT_UPLOAD_PACK_SUBCOMMANDS, isAssignment,
-    KEYWORDS, MAX_UNLISTED_INNER, OverBudget, REFUSED_GIT_OPTION, RISKY_GIT_CONFIG, riskyEnv, SAFE_ENV, SHELLS, spend,
-    startBudget, tokenize, unquoted, WATCHED_ENV, WRAPPERS, wrapperTarget,
+    KEYWORDS, MAX_UNLISTED_INNER, OverBudget, readHeredocStart, REFUSED_GIT_OPTION, RISKY_GIT_CONFIG, riskyEnv,
+    SAFE_ENV, SHELLS, skipHeredocBody, spend, startBudget, tokenize, unquoted, WATCHED_ENV, WRAPPERS, wrapperTarget,
 } from './shell-reader.mjs';
 
 // Re-exported for the tests and tools that import them from the guard.
@@ -501,6 +504,64 @@ function blockConfigReach(what) {
             'program runs as git (PATH), so a folder a branch committed can make git run a program. ' +
             'Run commands with the HOME and PATH you already have.'
     );
+}
+
+const ARITHMETIC_NAME = /(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*/g;
+
+/** The refusal for the first name in an arithmetic expression that git reads (assigned or only read), or null. */
+function checkArithmetic(expr, what) {
+    for (const name of expr.match(ARITHMETIC_NAME) ?? []) {
+        if (name.includes('GIT_CONFIG')) return blockSettingsEnvOverwrite(what);
+        if (CONFIG_REACH_ENV.test(name)) return blockConfigReach(what);
+    }
+    return null;
+}
+
+// `(( PATH = 1 ))` and `: $(( HOME = 1 ))` assign as `let PATH=1` does. The
+// reader splits the parens off and leaves the plain words `PATH = 1`, so the
+// expressions are found here on the command line. Single-quoted text, comments
+// and quoted heredoc bodies are data; inside double quotes and an unquoted
+// heredoc body only `$((` is arithmetic. A single `(` opens a subshell, so
+// `( echo PATH )` is none, and a `$(...)` body is read when it is checked as a
+// command of its own.
+function arithmeticExpressions(input, text = false) {
+    const found = [];
+    let inDouble = text;
+    const pending = []; // heredocs started on the current line
+    for (let i = 0; i < input.length; i++) {
+        const c = input[i];
+        if (c === '\\') {
+            i++;
+        } else if (c === '"' && !text) {
+            inDouble = !inDouble;
+        } else if (c === '(' && input[i + 1] === '(' && (!inDouble || input[i - 1] === '$')) {
+            const end = closeParen(input, i + 1);
+            found.push(input.slice(i + 2, end));
+            i = end - 1;
+        } else if (c === '$' && input[i + 1] === '(' && input[i + 2] !== '(') {
+            i = closeParen(input, i + 2) - 1;
+        } else if (inDouble) {
+            continue;
+        } else if (c === "'") {
+            // a `$'...'` holding `\'`, which would end later, is refused before this runs
+            const end = input.indexOf("'", i + 1);
+            i = end === -1 ? input.length : end;
+        } else if (c === '#' && (i === 0 || /[\s;&|()]/.test(input[i - 1]))) {
+            while (i + 1 < input.length && input[i + 1] !== '\n') i++;
+        } else if (c === '<' && input[i + 1] === '<') {
+            const h = readHeredocStart(input, i); // no delimiter at the `<<` of `<<<`
+            if (h.delim) pending.push(h);
+            i = h.next - 1;
+        } else if (c === '\n') {
+            while (pending.length) {
+                const h = pending.shift();
+                const end = skipHeredocBody(input, i + 1, h.delim);
+                if (!h.quoted) found.push(...arithmeticExpressions(input.slice(i + 1, end), true));
+                i = end - 1;
+            }
+        }
+    }
+    return found;
 }
 
 function checkGit(args, inlineEnv = {}, exported = {}) {
@@ -1951,7 +2012,7 @@ function checkSegment(words, state) {
     // Other builtins set a variable as a statement too, and an exported one
     // keeps its export: `printf -v NAME`, `read NAME`, `mapfile NAME` /
     // `readarray NAME`, the loop variable of `for NAME in` / `select NAME in`,
-    // and `let NAME=` (an arithmetic assignment). The name is refused as for
+    // `getopts OPTS NAME` and `let NAME=` (an arithmetic assignment). The name is refused as for
     // unset; a `printf -v` with no name is refused too. Every operand of read
     // and mapfile is read as a name, so an option value that is not a plain
     // word (`read -p 'Name: ' x`) is refused as well. A `let` expression is
@@ -1979,6 +2040,14 @@ function checkSegment(words, state) {
     if (cmd === 'let') {
         const expr = args.find((a) => a.includes('GIT_CONFIG') || a.includes('$'));
         if (expr !== undefined) return blockSettingsEnvOverwrite(`let ${expr}`);
+        for (const a of args) {
+            const r = checkArithmetic(a, `let ${a}`);
+            if (r) return r;
+        }
+    }
+    if (cmd === 'getopts' && args[1] !== undefined) {
+        if (removesSettingsEnv(args[1])) return blockSettingsEnvOverwrite(`getopts ${args.join(' ')}`);
+        if (CONFIG_REACH_ENV.test(args[1])) return blockConfigReach(`getopts ${args.join(' ')}`);
     }
     if (cmd === 'git') {
         const refusal = checkGit(args, inlineEnv, state.exportedEnv ?? {});
@@ -2151,6 +2220,10 @@ export function checkCommand(command, state = {}) {
     // that does not follow execution order.
     const segments = tokenize(command);
     if (segments.some(untrackedDirectoryChange)) state.cwd = null;
+    for (const expr of arithmeticExpressions(command)) {
+        const r = checkArithmetic(expr, `((${expr}`);
+        if (r) return r;
+    }
     for (const sub of extractSubstitutions(command)) {
         const r = checkCommand(sub, state);
         if (r) return r;

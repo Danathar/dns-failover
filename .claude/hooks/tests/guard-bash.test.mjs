@@ -319,6 +319,22 @@ const allowed = [
     'for x in HOME; do echo $x; done',
     // HOME or PATH as an operand of any other command is only a word
     'grep PATH README.md',
+    // a single paren is a subshell, and arithmetic on another name sets nothing git reads
+    '( echo PATH ); git log -1',
+    '(( i = 1 )); git log -1',
+    'let i=1; git log -1',
+    'getopts ab opt; git log -1',
+    'getopts ab',
+    // quoted text, a comment, a quoted heredoc body and an unquoted body without `$` are data
+    "echo '$(( PATH = 1 ))'; git log -1",
+    'echo "(( PATH = 1 ))"; git log -1',
+    "echo $'(( PATH = 1 ))'; git log -1",
+    '# (( PATH = 1 ))\ngit log -1',
+    'git log -1;# (( PATH = 1 ))',
+    "cat <<'EOF'\n$(( PATH = 1 ))\nEOF",
+    'cat <<EOF\n(( PATH = 1 ))\nEOF',
+    'cat <<EOF\na "b\n(( PATH = 1 ))\nEOF',
+    'echo \\(\\( PATH \\)\\); git log -1',
 ];
 
 const blocked = [
@@ -454,6 +470,35 @@ const blocked = [
     ['printf -v HOME planted; git log -p', '`printf -v HOME`'],
     ['printf -vXDG_CONFIG_HOME planted; git log -p', '`printf -v XDG_CONFIG_HOME`'],
     ['printf -v PATH planted; git log -1', 'which program runs as git (PATH)'],
+    // let, getopts, and an arithmetic command or expansion assign a name with no NAME=value word
+    ['let PATH=1; git log -1', '`let PATH=1`'],
+    ['let "HOME = 1"; git log -p', '`let HOME = 1`'],
+    ['let i=1 XDG_CONFIG_HOME=1; git log -p', '`let XDG_CONFIG_HOME=1`'],
+    ['if let PATH=1; then git log -1; fi', '`let PATH=1`'],
+    ['getopts ab PATH; git log -1', '`getopts ab PATH` changes where'],
+    ['getopts ab GIT_CONFIG_COUNT; git log -p', '`getopts ab GIT_CONFIG_COUNT` overwrites'],
+    ['(( PATH = 1 )); git log -1', 'which program runs as git (PATH)'],
+    ['(( HOME = 1 )); git diff HEAD~1 HEAD', 'changes where git reads its global config'],
+    ['(( GIT_CONFIG_COUNT = 0 )); git log -p', 'overwrites the GIT_CONFIG_* settings env'],
+    ['(( i = 1, PATH = 1 )); git log -1', 'which program runs as git (PATH)'],
+    [': $(( XDG_CONFIG_HOME = 1 )); git log -p -1', 'changes where git reads its global config'],
+    ['echo "$(( PATH = 1 ))"; git log -1', 'which program runs as git (PATH)'],
+    ['for (( PATH = 1; PATH < 2; PATH++ )); do git log -1; done', 'which program runs as git (PATH)'],
+    ["bash -c '(( PATH = 1 )); git log -1'", 'which program runs as git (PATH)'],
+    ['cat <<EOF\n$(( PATH = 1 ))\nEOF\ngit log -1', 'which program runs as git (PATH)'],
+    // a quote mark in a comment, a heredoc body, a substitution or an escape opens no quote
+    ["# don't\n(( PATH = 1 ))\ngit log -1", 'which program runs as git (PATH)'],
+    ["git status # it's\n(( PATH = 1 ))\ngit log -1", 'which program runs as git (PATH)'],
+    ["git status;# it's\n(( PATH = 1 ))\ngit log -1", 'which program runs as git (PATH)'],
+    ["cat <<EOF\nit's\nEOF\n(( PATH = 1 ))\ngit log -1", 'which program runs as git (PATH)'],
+    ["cat <<'EOF'\nit's\nEOF\n(( PATH = 1 ))\ngit log -1", 'which program runs as git (PATH)'],
+    ["cat <<'A' <<EOF\nit's\nA\n$(( PATH = 1 ))\nEOF\ngit log -1", 'which program runs as git (PATH)'],
+    ["cat <<A <<B\nx\nA\nit's\nB\n(( PATH = 1 ))\ngit log -1", 'which program runs as git (PATH)'],
+    ['echo "$(echo "it\'s")"; (( PATH = 1 )); git log -1', 'which program runs as git (PATH)'],
+    ['echo "it\'s"; (( PATH = 1 )); git log -1', 'which program runs as git (PATH)'],
+    ["cat <<< 'x'\n(( PATH = 1 ))\ngit log -1", 'which program runs as git (PATH)'],
+    ["echo it\\'s; (( PATH = 1 )); git log -1", 'which program runs as git (PATH)'],
+    ["echo 'a' $'b' x#y; (( PATH = 1 )); git log -1", 'which program runs as git (PATH)'],
     // a subscript assigns the variable itself
     ['PATH[0]=planted; git log -1', '`PATH[0]=planted`'],
     ['HOME[0]+=/planted; git log -p', 'changes where git reads its global config'],
