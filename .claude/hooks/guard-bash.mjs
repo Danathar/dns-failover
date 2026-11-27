@@ -170,8 +170,8 @@ import {
     ARGUMENT_ONLY_PROGRAMS, braceForms, BUDGET_MS, changesDirectory, CHDIR, closeParen, COMMAND_STRING_SEPARATORS,
     commandNameReader, commandStrings, EXEC_GIT_CONFIG, expandWrapperOptions, extractSubstitutions, FIND_EXEC, firstWord,
     fishScripts, GIT_EXEC_OPTION, GIT_SHORT_UPLOAD_PACK, GIT_UPLOAD_PACK_OPTION, GIT_UPLOAD_PACK_SUBCOMMANDS, isAssignment,
-    KEYWORDS, MAX_UNLISTED_INNER, OverBudget, readHeredocStart, REFUSED_GIT_OPTION, RISKY_GIT_CONFIG, riskyEnv,
-    SAFE_ENV, SHELLS, skipHeredocBody, spend, startBudget, tokenize, unquoted, WATCHED_ENV, WRAPPERS, wrapperTarget,
+    KEYWORDS, MAX_UNLISTED_INNER, OverBudget, REFUSED_GIT_OPTION, RISKY_GIT_CONFIG, riskyEnv,
+    SAFE_ENV, SHELLS, spend, startBudget, tokenize, unquoted, walkExpanded, WATCHED_ENV, WRAPPERS, wrapperTarget,
 } from './shell-reader.mjs';
 
 // Re-exported for the tests and tools that import them from the guard.
@@ -524,43 +524,16 @@ function checkArithmetic(expr, what) {
 // heredoc body only `$((` is arithmetic. A single `(` opens a subshell, so
 // `( echo PATH )` is none, and a `$(...)` body is read when it is checked as a
 // command of its own.
-function arithmeticExpressions(input, text = false) {
+function arithmeticExpressions(input) {
     const found = [];
-    let inDouble = text;
-    const pending = []; // heredocs started on the current line
-    for (let i = 0; i < input.length; i++) {
-        const c = input[i];
-        if (c === '\\') {
-            i++;
-        } else if (c === '"' && !text) {
-            inDouble = !inDouble;
-        } else if (c === '(' && input[i + 1] === '(' && (!inDouble || input[i - 1] === '$')) {
-            const end = closeParen(input, i + 1);
-            found.push(input.slice(i + 2, end));
-            i = end - 1;
-        } else if (c === '$' && input[i + 1] === '(' && input[i + 2] !== '(') {
-            i = closeParen(input, i + 2) - 1;
-        } else if (inDouble) {
-            continue;
-        } else if (c === "'") {
-            // a `$'...'` holding `\'`, which would end later, is refused before this runs
-            const end = input.indexOf("'", i + 1);
-            i = end === -1 ? input.length : end;
-        } else if (c === '#' && (i === 0 || /[\s;&|()]/.test(input[i - 1]))) {
-            while (i + 1 < input.length && input[i + 1] !== '\n') i++;
-        } else if (c === '<' && input[i + 1] === '<') {
-            const h = readHeredocStart(input, i); // no delimiter at the `<<` of `<<<`
-            if (h.delim) pending.push(h);
-            i = h.next - 1;
-        } else if (c === '\n') {
-            while (pending.length) {
-                const h = pending.shift();
-                const end = skipHeredocBody(input, i + 1, h.delim);
-                if (!h.quoted) found.push(...arithmeticExpressions(input.slice(i + 1, end), true));
-                i = end - 1;
-            }
-        }
-    }
+    walkExpanded(input, (text, i, inDouble) => {
+        // a `$(...)` body is read as a command of its own; step over it so its quotes do not skew this one
+        if (text[i] === '$' && text[i + 1] === '(' && text[i + 2] !== '(') return closeParen(text, i + 2);
+        if (text[i] !== '(' || text[i + 1] !== '(' || (inDouble && text[i - 1] !== '$')) return undefined;
+        const end = closeParen(text, i + 1);
+        found.push(text.slice(i + 2, end));
+        return end;
+    });
     return found;
 }
 
