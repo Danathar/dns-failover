@@ -527,6 +527,8 @@ function checkArithmetic(expr, what) {
 function arithmeticExpressions(input) {
     const found = [];
     walkExpanded(input, (text, i, inDouble) => {
+        // a `$(...)` body is read as a command of its own; step over it so its quotes do not skew this one
+        if (text[i] === '$' && text[i + 1] === '(' && text[i + 2] !== '(') return closeParen(text, i + 2);
         if (text[i] !== '(' || text[i + 1] !== '(' || (inDouble && text[i - 1] !== '$')) return undefined;
         const end = closeParen(text, i + 1);
         found.push(text.slice(i + 2, end));

@@ -58,6 +58,15 @@ const KNOWN_GAPS = new Set([
     'dir-change-subshell',
     'dir-change-pushd',
     'dir-change-bare-cd',
+    // Each changes folder (env -C, env --chdir, git -C, or a cd inside if, for
+    // or !) before `git diff -- x .env`, which is plain-file-after-dashdash
+    // above: the name after `--` is read, the command is allowed.
+    'dir-change-env-c',
+    'dir-change-env-chdir',
+    'dir-change-git-c',
+    'compound-if-cd',
+    'compound-do-cd',
+    'compound-not-cd',
 ]);
 
 // The command prefix each wildcard Bash(...) allow rule covers. The fleet
