@@ -826,6 +826,15 @@ const blocked = [
     ['echo $(case esac in a|esac) sudo id;; esac)', 'privilege escalation'],
     ['echo $(case esac in a | esac) git push --force origin main;; esac)', 'force'],
     ['echo $(case esac in (a|esac) gh pr merge 1;; esac)', 'gh pr merge'],
+    // an apostrophe in a comment or an unquoted heredoc body opens no quote, so the
+    // substitution after it runs (akmods#336)
+    ["git log -1 # it's the last one\necho $(git push --force origin main)", 'force push'],
+    ["echo a # don't\necho `git push --force origin main`", 'force push'],
+    ["cat <<EOF\nit's\n$(git push --force origin main)\nEOF", 'force push'],
+    ["cat <<EOF\nit's\nEOF\necho $(git push --force origin main)", 'force push'],
+    ['echo "$(echo a # it\'s\n)"\ngit push --force origin main', 'force push'],
+    // a `<<` no line ends may be a shift, so the lines after it are commands
+    ['(( n = 1 << 2 ))\ngit push --force origin main', 'force push'],
 ];
 
 // ---------------------------------------------------------------------------

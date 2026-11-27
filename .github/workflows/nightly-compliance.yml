@@ -4,9 +4,10 @@ name: Nightly compliance
 # new Debian point release, a changed container image, a new package in the
 # Debian archive) is noticed without a pull request: the Python unit tests on
 # Debian 12 and 13, ruff, shellcheck, the policy-as-code checker, the node
-# script and hook tests, and the container end-to-end test. On a scheduled
-# failure it opens or updates ONE tracking issue in this repository (GH_REPO
-# below) and never closes it.
+# script and hook tests, the container end-to-end test, and a compare of the
+# shared guard files (shell reader, gate-refusal corpus) with their originals.
+# On a scheduled failure it opens or updates ONE tracking issue in this
+# repository (GH_REPO below) and never closes it.
 #
 # ruff and shellcheck are pinned to the same versions as ci.yml. A failure here
 # must mean main is broken under the gates that merged it, not that the runner
@@ -136,9 +137,42 @@ jobs:
       - name: Run end-to-end test in a throwaway container
         run: tests/e2e/run.sh
 
+  shared-guard-files:
+    name: Shared guard files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # The shell reader and the gate-refusal corpus are byte-identical copies
+      # of files kept in other repositories. Their tests pin each copy's hash,
+      # which catches a local edit but not a copy that has fallen behind its
+      # original, so this compares each with its original's main.
+      - name: Compare the shared guard files with their originals
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rc=0
+          compare() { # args: file path, then the repository that holds the original
+            local want got
+            want=$(gh api "repos/$2/contents/$1" -H 'Accept: application/vnd.github.raw' | sha256sum | cut -d' ' -f1)
+            got=$(sha256sum "$1" | cut -d' ' -f1)
+            if [ "$got" != "$want" ]; then
+              echo "::error::$1 is $got; $2 main has $want. Copy the file from there and update its pinned hash."
+              rc=1
+            else
+              echo "$1 matches $2 main ($got)."
+            fi
+          }
+          compare .claude/hooks/shell-reader.mjs Danathar/akmods
+          compare tests/fixtures/gate-refusal-corpus.json Danathar/atomic-image-builder
+          exit "$rc"
+
   report:
     name: Open or update the tracking issue
-    needs: [unit, lint, policies, e2e]
+    needs: [unit, lint, policies, e2e, shared-guard-files]
     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -154,10 +188,11 @@ jobs:
           LINT: ${{ needs.lint.result }}
           POLICIES: ${{ needs.policies.result }}
           E2E: ${{ needs.e2e.result }}
+          GUARD_FILES: ${{ needs.shared-guard-files.result }}
         run: |
           set -euo pipefail
           failed=""
-          for pair in "unit tests:$UNIT" "ruff/shellcheck:$LINT" "policies and repo-meta tests:$POLICIES" "e2e:$E2E"; do
+          for pair in "unit tests:$UNIT" "ruff/shellcheck:$LINT" "policies and repo-meta tests:$POLICIES" "e2e:$E2E" "shared guard files:$GUARD_FILES"; do
             [ "${pair#*:}" = "success" ] || failed="$failed ${pair%%:*} (${pair#*:});"
           done
           body=$(printf 'The nightly compliance run failed on %s.\n\nChecks that did not pass:%s\n\nRun: %s/%s/actions/runs/%s\n\nThis issue is not closed automatically; close it once the nightly is green.\n' \
